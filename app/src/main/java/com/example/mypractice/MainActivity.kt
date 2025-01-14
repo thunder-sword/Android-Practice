@@ -4,47 +4,29 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
 import com.example.mypractice.ui.theme.MyPracticeTheme
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.io.PrintWriter
-import java.net.Socket
+import kotlinx.coroutines.*
+import java.io.*
+import java.net.*
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             MyPracticeTheme {
-                // A surface container using the 'background' color from the theme
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colors.background
@@ -55,19 +37,21 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private var socket: Socket? = null
+    private var serverSocket: ServerSocket? = null
+    private var clientSocket: Socket? = null
     private var writer: PrintWriter? = null
     private var reader: BufferedReader? = null
-    private var isConnect: Boolean = false
+    private var isRunning: Boolean = false
 
     @Composable
-    fun TCPClientUI() {
-        var ip by remember { mutableStateOf("") }
+    fun TCPServerUI() {
         var port by remember { mutableStateOf("") }
-        var connectionStatus by remember { mutableStateOf("Not Connected") }
+        var connectionStatus by remember { mutableStateOf("Not Running") }
         var messageToSend by remember { mutableStateOf("") }
         var receivedMessages by remember { mutableStateOf("") }
-        val current= LocalContext.current
+        val current = LocalContext.current
+        var serverAddresses by remember { mutableStateOf("Unknown") }
+        var clientAddress by remember { mutableStateOf("Unknown") }
 
         Column(
             modifier = Modifier
@@ -76,22 +60,6 @@ class MainActivity : ComponentActivity() {
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            BasicTextField(
-                value = ip,
-                onValueChange = { ip = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp),
-                decorationBox = { innerTextField ->
-                    Box(
-                        modifier = Modifier.padding(8.dp)
-                    ) {
-                        if (ip.isEmpty()) Text("Enter IP Address")
-                        innerTextField()
-                    }
-                }
-            )
-
             BasicTextField(
                 value = port,
                 onValueChange = { port = it },
@@ -111,21 +79,29 @@ class MainActivity : ComponentActivity() {
 
             Button(onClick = {
                 val portNumber = port.toIntOrNull()
-                if (ip.isBlank() || portNumber == null) {
-                    Toast.makeText(this@MainActivity, "Invalid IP or Port", Toast.LENGTH_SHORT).show()
+                if (portNumber == null) {
+                    Toast.makeText(current, "Invalid Port", Toast.LENGTH_SHORT).show()
                     return@Button
                 }
 
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
-                        socket = Socket(ip, portNumber)
-                        writer = PrintWriter(socket!!.getOutputStream(), true)
-                        reader = BufferedReader(InputStreamReader(socket!!.getInputStream()))
+                        serverSocket = ServerSocket(portNumber)
+                        serverAddresses = getLocalIPAddresses().map{"$it:$portNumber"}.joinToString("\n")
+                        isRunning = true
 
                         withContext(Dispatchers.Main) {
-                            connectionStatus = "Connected to $ip:$portNumber"
-                            //标记为已连接
-                            isConnect=true
+                            connectionStatus = "Server running on\n$serverAddresses"
+                        }
+
+                        clientSocket = serverSocket!!.accept()
+                        writer = PrintWriter(clientSocket!!.getOutputStream(), true)
+                        reader = BufferedReader(InputStreamReader(clientSocket!!.getInputStream()))
+
+                        clientAddress = "${clientSocket?.inetAddress?.hostAddress}:${clientSocket?.port}"
+
+                        withContext(Dispatchers.Main) {
+                            connectionStatus = "Client connected from $clientAddress"
                         }
 
                         listenForMessages { message ->
@@ -133,28 +109,49 @@ class MainActivity : ComponentActivity() {
                         }
 
                         //主线程监听是否断开
-                        while (isConnect && socket?.isClosed == false) {
+                        while (isRunning) {
                             delay(500) // 每隔500ms检查一次
                         }
                         withContext(Dispatchers.Main) {
-                            isConnect = false
+                            isRunning = false
                             Toast.makeText(current, "连接已断开", Toast.LENGTH_SHORT).show()
                             connectionStatus = "Connection closed"
+                            clientSocket?.close()
+                            serverSocket?.close()
                         }
-
                     } catch (e: Exception) {
-                        Toast.makeText(current, "连接失败", Toast.LENGTH_SHORT).show()
                         withContext(Dispatchers.Main) {
-                            isConnect=false
-                            connectionStatus = "Connection failed: ${e.message}"
+                            connectionStatus = "Error: ${e.message}"
                         }
                     }
                 }
             }) {
-                Text("Connect")
+                Text("Start Server")
             }
 
-            Text(connectionStatus, Modifier.padding(8.dp))
+            Button(onClick = {
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        isRunning = false
+                        clientSocket?.close()
+                        serverSocket?.close()
+
+                        withContext(Dispatchers.Main) {
+                            connectionStatus = "Server stopped"
+                        }
+                    } catch (e: Exception) {
+                        withContext(Dispatchers.Main) {
+                            connectionStatus = "Error stopping server: ${e.message}"
+                        }
+                    }
+                }
+            }) {
+                Text("Stop Server")
+            }
+
+            SelectionContainer {
+                Text(connectionStatus, Modifier.padding(8.dp))
+            }
 
             BasicTextField(
                 value = messageToSend,
@@ -173,15 +170,8 @@ class MainActivity : ComponentActivity() {
             )
 
             Button(onClick = {
-                // 发送前检测socket是否处于连接状态
-                if (!isConnect || null == socket || socket?.isClosed == true || socket?.isInputShutdown == true || socket?.isOutputShutdown == true){
-                    isConnect = false
-                    Toast.makeText(current, "当前未连接，无法发送", Toast.LENGTH_SHORT).show()
-                    return@Button
-                }
-
-                if (messageToSend.isBlank()) {
-                    Toast.makeText(current, "发送内容不能为空", Toast.LENGTH_SHORT).show()
+                if (!isRunning || writer == null) {
+                    Toast.makeText(current, "Server not running or no client connected", Toast.LENGTH_SHORT).show()
                     return@Button
                 }
 
@@ -190,8 +180,7 @@ class MainActivity : ComponentActivity() {
                         writer?.println(messageToSend)
                         withContext(Dispatchers.Main) {
                             receivedMessages += "\nSent: $messageToSend"
-                            //发送信息后清空输入框
-                            messageToSend=""
+                            messageToSend = ""
                         }
                     } catch (e: Exception) {
                         withContext(Dispatchers.Main) {
@@ -203,7 +192,6 @@ class MainActivity : ComponentActivity() {
                 Text("Send")
             }
 
-            //让文本框支持向下滚动
             val scrollState = rememberScrollState()
             Box(
                 Modifier
@@ -221,32 +209,46 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
-            //每次更新消息时自动滑动到最下面
+
             LaunchedEffect(receivedMessages) {
                 scrollState.scrollTo(scrollState.maxValue)
             }
         }
     }
 
+    //监听信息线程
     private fun listenForMessages(onMessageReceived: (String) -> Unit) {
         try {
-            while (true) {
+            while (isRunning) {
                 val message = reader?.readLine() ?: break
                 onMessageReceived(message)
             }
         } catch (e: Exception) {
             onMessageReceived("Error: ${e.message}")
         } finally {
-            isConnect=false
+            isRunning=false
             onMessageReceived("Info: Connection closed.")
         }
     }
 
+    //获取本机全部ip，同时获取ipv4和ipv6（过滤了链路地址），ipv6用中括号[]包裹
+    private fun getLocalIPAddresses(): List<String> {
+        return NetworkInterface.getNetworkInterfaces().toList()
+            .flatMap { it.inetAddresses.toList() }
+            .filter {
+                        !it.isLoopbackAddress &&
+                        !(it is Inet6Address && it.isLinkLocalAddress)
+            }
+            .map { if(it is Inet6Address)
+                "[${it.hostAddress}]"
+            else it.hostAddress}
+    }
+
     override fun onDestroy() {
         super.onDestroy()
-        socket?.close()
-        writer?.close()
-        reader?.close()
+        isRunning = false
+        clientSocket?.close()
+        serverSocket?.close()
     }
 
     @Composable
@@ -254,11 +256,12 @@ class MainActivity : ComponentActivity() {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
-        ){
-            TCPClientUI()
+        ) {
+            TCPServerUI()
         }
     }
 }
+
 
 
 
