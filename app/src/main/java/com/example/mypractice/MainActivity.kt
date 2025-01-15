@@ -26,6 +26,7 @@ class MainActivity : ComponentActivity() {
                         x -> when(x) {
                             1 -> startActivity(Intent(this, TCPListener::class.java))
                             2 -> startActivity(Intent(this, TCPConnecter::class.java))
+                            3 -> startActivity(Intent(this, DrawTest::class.java))
                         else -> Toast.makeText(this@MainActivity, "未知的跳转页面", Toast.LENGTH_SHORT).show()
                         }
                     }
@@ -59,6 +60,14 @@ fun MainScreen(startUp: (Int) -> Unit) {
                 }
             ) {
                 Text("Connect")
+            }
+
+            Button(
+                onClick = {
+                    startUp(3)
+                }
+            ) {
+                Text("Draw")
             }
         }
     }

@@ -1,10 +1,10 @@
 package com.example.mypractice.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material.MaterialTheme
-import androidx.compose.material.darkColors
-import androidx.compose.material.lightColors
+import androidx.compose.material.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 
 private val DarkColorPalette = darkColors(
     primary = Purple200,
@@ -27,6 +27,10 @@ private val LightColorPalette = lightColors(
     */
 )
 
+val LocalTextFieldColors = staticCompositionLocalOf<TextFieldColors> {
+    error("No TextFieldColors provided") // 如果未提供会抛出错误
+}
+
 @Composable
 fun MyPracticeTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
     val colors = if (darkTheme) {
@@ -35,10 +39,24 @@ fun MyPracticeTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Compos
         LightColorPalette
     }
 
+    //定义TextField样式，让其在夜间时将输入字符的颜色显示为白色
+    val textFieldColors = TextFieldDefaults.textFieldColors(
+        textColor = colors.onSurface,  // 正确：文本颜色，应该是背景色的对比色
+        cursorColor = colors.primary,  // 光标颜色，可以是主要颜色
+        focusedIndicatorColor = colors.primary,  // 聚焦时的指示器颜色
+        unfocusedIndicatorColor = colors.onSurface.copy(alpha = 0.5f),  // 非聚焦时的指示器颜色
+        backgroundColor = colors.surface  // 背景颜色
+    )
+
     MaterialTheme(
         colors = colors,
         typography = Typography,
         shapes = Shapes,
-        content = content
+        content = {
+            CompositionLocalProvider(
+            LocalTextFieldColors provides textFieldColors, // 提供自定义的 TextFieldColors
+            content = content
+        )
+        }
     )
 }
