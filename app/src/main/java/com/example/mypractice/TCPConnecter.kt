@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -75,37 +74,23 @@ class TCPConnecter : ComponentActivity() {
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            BasicTextField(
+            TextField(
                 value = ip,
                 onValueChange = { ip = it },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(8.dp),
-                decorationBox = { innerTextField ->
-                    Box(
-                        modifier = Modifier.padding(8.dp)
-                    ) {
-                        if (ip.isEmpty()) Text("Enter IP Address")
-                        innerTextField()
-                    }
-                }
+                label = { Text("Enter IP Address") }
             )
 
-            BasicTextField(
+            TextField(
                 value = port,
                 onValueChange = { port = it },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(8.dp),
                 keyboardOptions = KeyboardOptions.Default.copy(keyboardType = KeyboardType.Number),
-                decorationBox = { innerTextField ->
-                    Box(
-                        modifier = Modifier.padding(8.dp)
-                    ) {
-                        if (port.isEmpty()) Text("Enter Port")
-                        innerTextField()
-                    }
-                }
+                label = { Text("Enter Port") }
             )
 
             Row(
@@ -199,25 +184,18 @@ class TCPConnecter : ComponentActivity() {
             val scrollState2 = rememberScrollState()
             Box(
                 Modifier
-                    .fillMaxWidth()
+                    .fillMaxSize()
                     .weight(3f)
                     .verticalScroll(scrollState2)
                     .padding(8.dp)
             ) {
-                BasicTextField(
+                TextField(
                     value = messageToSend,
                     onValueChange = { messageToSend = it },
                     modifier = Modifier
-                        .fillMaxWidth()
+                        .fillMaxSize()
                         .padding(8.dp),
-                    decorationBox = { innerTextField ->
-                        Box(
-                            modifier = Modifier.padding(8.dp)
-                        ) {
-                            if (messageToSend.isEmpty()) Text("Enter Message")
-                            innerTextField()
-                        }
-                    }
+                    label = { Text("Enter Message") }
                 )
             }
             //每次输入消息时自动滑动到最下面
