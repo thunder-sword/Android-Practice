@@ -1,6 +1,7 @@
 package com.example.mypractice
 
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
@@ -9,6 +10,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -16,14 +20,19 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.example.mypractice.ui.theme.MyPracticeTheme
+import com.example.mypractice.ChessPiece.*
+import kotlinx.coroutines.launch
 import kotlin.math.pow
 
 class DrawTest : ComponentActivity() {
@@ -48,9 +57,31 @@ fun ChessBoard() {
     // 棋盘行列数
     val boardCols = 9
     val boardRows = 10
+    //获取当前上下文
+    val current= LocalContext.current
+
+    // 处理棋子状态的协程
+    val coroutineScope = rememberCoroutineScope()
+    // 当前被选中棋子
+    val selectedPiece = remember { mutableStateOf<ChessPiece?>(null) }
 
     // 加载棋盘图片
-    val chessBoardImage = ImageBitmap.imageResource(id = R.drawable.board) // 替换为你的棋盘图片资源
+    val chessBoardImage = ImageBitmap.imageResource(id = R.drawable.board)
+    // 加载棋子图片
+    val chess_b_c = ImageBitmap.imageResource(id = R.drawable.b_c)
+    // 定义90个棋子
+    var allPieces = remember { mutableListOf<ChessPiece>() }
+    for(col in 0..8){
+        for(row in 0..9){
+            allPieces.add( remember {
+                ChessPiece(
+                position = Pair(col, row),
+                image = chess_b_c,
+                isAlive = true
+                )}
+            )
+        }
+    }
 
     // 定义图片有效区域比例（图片裁剪用）
     val paddingTop = 0.02f   // 图片顶部空白占比
@@ -92,7 +123,7 @@ fun ChessBoard() {
                 .size(width = chessBoardWidth, height = chessBoardHeight)
                 .pointerInput(Unit) {
                     detectTapGestures { offset ->
-                        val (col, row) = offsetToChessIndexWithBorder(
+                        val (col, row) = offsetToChessIndex(
                             offset,
                             Size(chessBoardWidth.toPx(), chessBoardHeight.toPx()),
                             boardCols,
@@ -107,6 +138,42 @@ fun ChessBoard() {
                             borderBottom
                         )
                         println("点击了棋盘的坐标：列 $col, 行 $row")
+                        Toast
+                            .makeText(current, "列 $col, 行 $row", Toast.LENGTH_SHORT)
+                            .show()
+                        //如果棋子被点击则切换其被选择状态
+                        val clickedPiece =
+                            allPieces.find { it.isAlive && it.position == Pair(col, row) }
+
+                        if (clickedPiece != null) {
+                            //println("原始动画信息：${clickedPiece.scaleAnimation.value}，${clickedPiece.liftAnimation.value}")
+                            // 切换选中状态
+                            coroutineScope.launch {
+                                if (selectedPiece.value == clickedPiece) {
+                                    clickedPiece.deselect()
+                                    selectedPiece.value = null
+                                    Toast
+                                        .makeText(
+                                            current,
+                                            "取消选中了列 $col, 行 $row 的棋子",
+                                            Toast.LENGTH_SHORT
+                                        )
+                                        .show()
+                                } else {
+                                    selectedPiece.value?.deselect()
+                                    clickedPiece.select()
+                                    selectedPiece.value = clickedPiece
+                                    Toast
+                                        .makeText(
+                                            current,
+                                            "选中了列 $col, 行 $row 的棋子",
+                                            Toast.LENGTH_SHORT
+                                        )
+                                        .show()
+                                }
+                            }
+                            //println("点击后动画信息：${clickedPiece.scaleAnimation.value}，${clickedPiece.liftAnimation.value}")
+                        }
                     }
                 }
         ) {
@@ -153,12 +220,25 @@ fun ChessBoard() {
                     )
                 }
             }
+
+            //棋子的大小
+            val chess_size = 120
+            for (piece in allPieces) {
+                piece.draw(
+                    this,
+                    borderLeft = size.width * borderLeft,
+                    borderTop = size.height * borderTop,
+                    cellWidth = cellWidth,
+                    cellHeight = cellHeight,
+                    chess_size = chess_size
+                )
+            }
         }
     }
 }
 
 //将点击的位置转换为棋盘上的坐标
-fun offsetToChessIndexWithBorder(
+fun offsetToChessIndex(
     offset: Offset,
     size: Size,
     cols: Int,
