@@ -2,29 +2,40 @@ package com.example.mypractice
 
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector2D
+import androidx.compose.animation.core.Transition
+import androidx.compose.animation.core.TwoWayConverter
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.updateTransition
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import kotlin.math.sqrt
 
 class ChessPiece(
     var position: Pair<Int, Int>,  // 棋子当前坐标
     val image: ImageBitmap,       // 棋子图片
     var isAlive: Boolean = true   // 是否存活
 ) {
-    val scaleAnimation = Animatable(1f) // 缩放动画
-    val liftAnimation = Animatable(0f) // 抬起动画 (z-index 偏移)
     var isSelected: Boolean = false // 是否被选中
+    // 动画控制
+    private val pairConverter = TwoWayConverter<Pair<Float, Float>, AnimationVector2D>(
+        convertToVector = { pair -> AnimationVector2D(pair.first, pair.second) },
+        convertFromVector = { vector -> Pair(vector.v1, vector.v2) }
+    )
+    private val combinedAnimation = Animatable(initialValue = Pair(1f, 0f), typeConverter = pairConverter)
 
     /**
      * 播放选中动画
      */
     suspend fun select() {
         isSelected = true
-        scaleAnimation.animateTo(1.2f, animationSpec = tween(300)) // 缩放到 1.2 倍
-        liftAnimation.animateTo(20f, animationSpec = tween(300))   // 抬起 20 像素
+        combinedAnimation.animateTo(Pair(1.2f, 20f), animationSpec = tween(200)) // 缩放到 1.2 倍
     }
 
     /**
@@ -32,20 +43,22 @@ class ChessPiece(
      */
     suspend fun deselect() {
         isSelected = false
-        scaleAnimation.animateTo(1f, animationSpec = tween(300))   // 恢复原始大小
-        liftAnimation.animateTo(0f, animationSpec = tween(300))    // 恢复原始位置
+        combinedAnimation.animateTo(Pair(1f, 0f), animationSpec = tween(200))
     }
 
     /**
      * 绘制棋子
      * @param drawScope 当前 Canvas 的绘制范围
-     * @param cellSize 每个格子的宽高
+     * @param borderLeft 棋盘的左侧空白部分长度
+     * @param borderTop 棋盘的顶部空白部分长度
+     * @param cellWidth 每个格子的宽度
+     * @param cellHeight 每个格子的高度
      */
-    fun draw(drawScope: DrawScope, borderLeft: Float, borderTop: Float, cellWidth: Float, cellHeight: Float, chess_size: Int) {
+    fun draw(drawScope: DrawScope, borderLeft: Float, borderTop: Float, cellWidth: Float, cellHeight: Float) {
         val (x, y) = position
-        val centerX = cellWidth * x + cellWidth / 2
-        val centerY = cellHeight * y + cellHeight / 2 - liftAnimation.value
-        val size = (cellWidth * scaleAnimation.value).toInt()
+        val centerX = borderLeft + cellWidth * x
+        val centerY = borderTop + cellHeight * y - combinedAnimation.value.second
+        val size = sqrt(cellWidth*cellWidth+cellHeight*cellHeight.toDouble()) *0.66 * combinedAnimation.value.first    //棋子的大小设定为0.66*格子的对角线长度
 
         drawScope.drawIntoCanvas { canvas ->
             val paint = Paint().apply {
@@ -61,7 +74,7 @@ class ChessPiece(
                 (centerX - size / 2).toInt(),
                 (centerY - size / 2).toInt()
             )
-            val dstSize = IntSize(size, size)
+            val dstSize = IntSize(size.toInt(), size.toInt())
             // 绘制图片
             canvas.drawImageRect(
                 image = image,
@@ -72,14 +85,5 @@ class ChessPiece(
                 paint = paint
             )
         }
-
-//        drawScope.drawImage(
-//            image = image,
-//            dstOffset = IntOffset(
-//                x = (borderLeft + x * cellWidth - 0.55 * chess_size).toInt(),
-//                y = (borderTop + y * cellHeight - 0.55 * chess_size).toInt()
-//            ),
-//            dstSize = IntSize(chess_size, chess_size)
-//        )
     }
 }
