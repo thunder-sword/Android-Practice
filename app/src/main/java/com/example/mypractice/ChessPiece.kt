@@ -3,13 +3,8 @@ package com.example.mypractice
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector2D
-import androidx.compose.animation.core.Transition
 import androidx.compose.animation.core.TwoWayConverter
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.updateTransition
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -65,10 +60,6 @@ class ChessPiece(
                 isAntiAlias = true
             }
 
-            // 定义源区域（裁剪整张图片）
-            val srcOffset = IntOffset(0, 0)
-            val srcSize = IntSize(image.width, image.height)
-
             // 定义目标区域（图片最终绘制的位置和大小）
             val dstOffset = IntOffset(
                 (centerX - size / 2).toInt(),
@@ -78,8 +69,6 @@ class ChessPiece(
             // 绘制图片
             canvas.drawImageRect(
                 image = image,
-                srcOffset = srcOffset,
-                srcSize = srcSize,
                 dstOffset = dstOffset,
                 dstSize = dstSize,
                 paint = paint

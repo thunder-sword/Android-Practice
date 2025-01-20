@@ -1,7 +1,6 @@
 package com.example.mypractice
 
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
@@ -16,11 +15,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -46,10 +43,6 @@ class DrawTest : ComponentActivity() {
 //画棋盘
 @Composable
 fun ChessBoard() {
-
-    //获取当前上下文
-    val current= LocalContext.current
-
     // 处理棋子状态的协程
     val coroutineScope = rememberCoroutineScope()
     // 当前被选中棋子
@@ -94,19 +87,15 @@ fun ChessBoard() {
     }
 
     // 屏幕宽高获取
-    val screenWidth = LocalConfiguration.current.screenWidthDp.dp
-    val screenHeight = LocalConfiguration.current.screenHeightDp.dp
+    val maxWidth = LocalConfiguration.current.screenWidthDp.dp // 最大宽度占屏幕宽度的100%
+    val maxHeight = LocalConfiguration.current.screenHeightDp.dp // 最大高度占屏幕高度的100%
 
-    // 计算棋盘适配后的宽高
-    val maxWidth = screenWidth // 最大宽度占屏幕宽度的100%
-    val maxHeight = screenHeight // 最大高度占屏幕高度的100%
-
+    // 计算棋盘适配后的宽高（大概运算，使图片等比扩大）
     val chessBoardWidth = if (maxWidth * chessBoard.rows / chessBoard.cols <= maxHeight) {
         maxWidth
     } else {
         maxHeight * chessBoard.cols / chessBoard.rows
     }
-
     val chessBoardHeight = chessBoardWidth * chessBoard.rows / chessBoard.cols
 
     // Box用于居中棋盘
@@ -123,26 +112,24 @@ fun ChessBoard() {
                     detectTapGestures { offset ->
                         val (col, row) = chessBoard.offsetToChessIndex(offset)
                         println("点击了棋盘的坐标：列 $col, 行 $row")
-                        //Toast.makeText(current, "列 $col, 行 $row", Toast.LENGTH_SHORT).show()
-                        //如果棋子被点击则切换其被选择状态
-                        val clickedPiece = allPieces.find { it.isAlive && it.position == Pair(col, row) }
 
-                        if (clickedPiece != null) {
-                            //println("原始动画信息：${clickedPiece.scaleAnimation.value}，${clickedPiece.liftAnimation.value}")
-                            // 切换选中状态
+                        //1.如果当前选中了棋子，则取消选择
+                        if(null != selectedPiece.value){
                             coroutineScope.launch {
-                                if (selectedPiece.value == clickedPiece) {
-                                    clickedPiece.deselect()
-                                    selectedPiece.value = null
-                                    Toast.makeText(current, "取消选中了列 $col, 行 $row 的棋子", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    selectedPiece.value?.deselect()
+                                selectedPiece.value?.deselect()
+                                selectedPiece.value = null
+                            }
+                        } else { //2.否则判断是否点中棋子，如果点中则选中，否则不操作
+                            //如果棋子被点击则切换其被选择状态
+                            val clickedPiece = allPieces.find { it.isAlive && it.position == Pair(col, row) }
+
+                            if (clickedPiece != null) {
+                                // 切换选中状态
+                                coroutineScope.launch {
                                     clickedPiece.select()
                                     selectedPiece.value = clickedPiece
-                                    Toast.makeText(current, "选中了列 $col, 行 $row 的棋子", Toast.LENGTH_SHORT).show()
                                 }
                             }
-                            //println("点击后动画信息：${clickedPiece.scaleAnimation.value}，${clickedPiece.liftAnimation.value}")
                         }
                     }
                 }

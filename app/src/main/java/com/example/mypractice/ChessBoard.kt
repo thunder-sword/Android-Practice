@@ -25,38 +25,24 @@ class ChessBoard(
     val borderLeftPercent: Float,   // 棋盘左侧边框宽度占有效宽度的比例
     val borderRightPercent: Float  // 棋盘右侧边框宽度占有效宽度的比例
 ) {
-    // 棋盘的长和宽
-    var width: Float = 0f
-    var height: Float = 0f
     // 棋盘单元格大小
     var cellWidth: Float = 0f
     var cellHeight: Float = 0f
-    // 棋盘空白区域大小
+    // 棋盘空白区域大小（对于屏幕）
     var paddingLeft: Float = 0f
-    var paddingRight: Float = 0f
     var paddingTop: Float = 0f
-    var paddingBottom: Float = 0f
-    // 棋盘内部边框大小
+    // 棋盘内部边框大小（对于屏幕）
     var borderLeft: Float = 0f
-    var borderRight: Float = 0f
     var borderTop: Float = 0f
-    var borderBottom: Float = 0f
 
     // 初始化棋盘大小
     fun initialize(canvasSize: Size) {
-        val imageWidth = image.width.toFloat()
-        val imageHeight = image.height.toFloat()
-
-        paddingLeft = imageWidth * paddingLeftPercent
-        paddingRight = imageWidth * paddingRightPercent
-        paddingTop = imageHeight * paddingTopPercent
-        paddingBottom = imageHeight * paddingBottomPercent
-        borderLeft = imageWidth * borderLeftPercent
-        borderRight = imageWidth * borderRightPercent
-        borderTop = imageHeight * borderTopPercent
-        borderBottom = imageHeight * borderBottomPercent
-        cellWidth = (imageWidth - borderLeft - borderRight) / (cols - 1)
-        cellHeight = (imageHeight - borderTop - borderBottom) / (rows - 1)
+        paddingLeft = canvasSize.width * paddingLeftPercent
+        paddingTop = canvasSize.height * paddingTopPercent
+        borderLeft = canvasSize.width * borderLeftPercent
+        borderTop = canvasSize.height * borderTopPercent
+        cellWidth = canvasSize.width * ( 1 - borderLeftPercent - borderRightPercent) / (cols - 1)
+        cellHeight = canvasSize.height * ( 1 - borderTopPercent - borderBottomPercent) / (rows - 1)
     }
 
     // 转换屏幕坐标为棋盘索引
@@ -92,10 +78,10 @@ class ChessBoard(
     // 绘制棋盘（包括图片裁剪逻辑）
     fun draw(drawScope: DrawScope) {
         val srcRect = Rect(
-            paddingLeft,
-            paddingTop,
-            image.width - paddingRight,
-            image.height - paddingBottom
+            paddingLeftPercent * image.width.toFloat(),
+            paddingTopPercent * image.height.toFloat(),
+            image.width.toFloat() * (1 - paddingRightPercent),
+            image.height.toFloat() * (1 - paddingBottomPercent)
         )
 
         drawScope.drawIntoCanvas { canvas ->
