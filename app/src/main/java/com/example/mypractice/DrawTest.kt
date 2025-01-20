@@ -52,6 +52,8 @@ fun ChessBoard() {
     val chessBoardImage = ImageBitmap.imageResource(id = R.drawable.board)
     // 加载棋子图片
     val chess_b_c = ImageBitmap.imageResource(id = R.drawable.b_c)
+    // 加载棋子背面图片
+    val chess_back = ImageBitmap.imageResource(id = R.drawable.back)
     // 定义90个棋子
     val allPieces = remember {
         mutableStateListOf<ChessPiece>().apply {
@@ -61,7 +63,7 @@ fun ChessBoard() {
                         ChessPiece(
                             position = Pair(col, row),
                             image = chess_b_c,
-                            isAlive = true
+                            backImage = chess_back
                         )
                     )
                 }
@@ -113,16 +115,20 @@ fun ChessBoard() {
                         val (col, row) = chessBoard.offsetToChessIndex(offset)
                         println("点击了棋盘的坐标：列 $col, 行 $row")
 
-                        //1.如果当前选中了棋子，则取消选择
+                        //如果棋子被点击则切换其被选择状态
+                        val clickedPiece = allPieces.find { it.isAlive && it.position == Pair(col, row) }
+
+                        //1.如果原来选中了棋子，而且不是再次点击的棋子，则直接取消选择棋子
                         if(null != selectedPiece.value){
                             coroutineScope.launch {
+                            //1.1.如果是原来的棋子，而且棋子是背面的，先翻面再取消选择（正面直接取消选择）
+                            if (clickedPiece == selectedPiece.value && false == clickedPiece?.isFront) {
+                                selectedPiece.value?.toFront()
+                            }
                                 selectedPiece.value?.deselect()
                                 selectedPiece.value = null
                             }
                         } else { //2.否则判断是否点中棋子，如果点中则选中，否则不操作
-                            //如果棋子被点击则切换其被选择状态
-                            val clickedPiece = allPieces.find { it.isAlive && it.position == Pair(col, row) }
-
                             if (clickedPiece != null) {
                                 // 切换选中状态
                                 coroutineScope.launch {
