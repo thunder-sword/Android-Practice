@@ -1,10 +1,14 @@
 package com.example.mypractice
 
 import androidx.compose.animation.core.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.res.imageResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import kotlin.math.sqrt
@@ -29,12 +33,12 @@ enum class PieceArm {
 //完整棋子类
 class ChessPiece(
     var position: Pair<Int, Int>,  // 棋子当前坐标
-    val image: ImageBitmap,       // 棋子图片
-    val backImage: ImageBitmap,     // 棋子背面图片
+    var camp: PieceCamp? = null,    // 什么阵营
+    var arm: PieceArm? = null,       // 什么兵种
     var isAlive: Boolean = true,   // 是否存活
     var isFront: Boolean = false,  // 是否已翻面
-    var camp: PieceCamp? = null,    // 什么阵营
-    var arm: PieceArm? = null       // 什么兵种
+    val imageId: Int? = null,       // 棋子图片
+    val backImageId: Int = R.drawable.back,     // 棋子背面图片
 ) {
     var isSelected: Boolean = false // 是否被选中
     // 动画控制
@@ -88,7 +92,10 @@ class ChessPiece(
      * @param cellWidth 每个格子的宽度
      * @param cellHeight 每个格子的高度
      */
+    @Composable
     fun draw(drawScope: DrawScope, borderLeft: Float, borderTop: Float, cellWidth: Float, cellHeight: Float) {
+        val image = ImageBitmap.imageResource(id = imageId!!)
+        val backImage = ImageBitmap.imageResource(id = backImageId!!)
         // 棋子要展示的图片
         val img = if (isFront) { image } else { backImage }
         // 棋子的位置和大小信息

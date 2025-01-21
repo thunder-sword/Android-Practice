@@ -49,7 +49,7 @@ fun ChessBoard() {
     val selectedPiece = remember { mutableStateOf<ChessPiece?>(null) }
 
     // 加载棋盘图片
-    val chessBoardImage = ImageBitmap.imageResource(id = R.drawable.board)
+    val chessBoardImage = remember { ImageBitmap.imageResource(id = R.drawable.board) }
     // 加载棋子图片
     val chess_b_c = ImageBitmap.imageResource(id = R.drawable.b_c)
     // 加载棋子背面图片
