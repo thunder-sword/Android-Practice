@@ -79,12 +79,12 @@ fun ChessBoard() {
             image = chessBoardImage,
             paddingTopPercent = 0.02f,   // 图片顶部空白占比
             paddingBottomPercent = 0.02f, // 图片底部空白占比
-            paddingLeftPercent = 0.05f,   // 图片左侧空白占比
-            paddingRightPercent = 0.04f,  // 图片右侧空白占比
+            paddingLeftPercent = 0.03f,   // 图片左侧空白占比
+            paddingRightPercent = 0.02f,  // 图片右侧空白占比
             borderTopPercent = 0.08f,    // 棋盘上方边框高度占有效高度的比例
             borderBottomPercent = 0.08f, // 棋盘下方边框高度占有效高度的比例
-            borderLeftPercent = 0.03f,   // 棋盘左侧边框宽度占有效宽度的比例
-            borderRightPercent = 0.03f  // 棋盘右侧边框宽度占有效宽度的比例
+            borderLeftPercent = 0.05f,   // 棋盘左侧边框宽度占有效宽度的比例
+            borderRightPercent = 0.05f  // 棋盘右侧边框宽度占有效宽度的比例
         )
     }
 

@@ -28,17 +28,12 @@ class ChessBoard(
     // 棋盘单元格大小
     var cellWidth: Float = 0f
     var cellHeight: Float = 0f
-    // 棋盘空白区域大小（对于屏幕）
-    var paddingLeft: Float = 0f
-    var paddingTop: Float = 0f
     // 棋盘内部边框大小（对于屏幕）
     var borderLeft: Float = 0f
     var borderTop: Float = 0f
 
     // 初始化棋盘大小
     fun initialize(canvasSize: Size) {
-        paddingLeft = canvasSize.width * paddingLeftPercent
-        paddingTop = canvasSize.height * paddingTopPercent
         borderLeft = canvasSize.width * borderLeftPercent
         borderTop = canvasSize.height * borderTopPercent
         cellWidth = canvasSize.width * ( 1 - borderLeftPercent - borderRightPercent) / (cols - 1)
@@ -56,8 +51,8 @@ class ChessBoard(
 
         for (col in 0 until cols) {
             for (row in 0 until rows) {
-                val centerX = paddingLeft + borderLeft + col * cellWidth
-                val centerY = paddingTop + borderTop + row * cellHeight
+                val centerX = borderLeft + col * cellWidth
+                val centerY = borderTop + row * cellHeight
                 val distance = sqrt((offset.x - centerX).toDouble().pow(2) + (offset.y - centerY).toDouble().pow(2))
 
                 if (distance < minDistance) {
@@ -92,6 +87,20 @@ class ChessBoard(
                 dstSize = IntSize(drawScope.size.width.toInt(), drawScope.size.height.toInt()),
                 paint = Paint().apply { isAntiAlias = true }
             )
+
+//            // 绘制交叉点（调试用，可移除）
+//            for (col in 0 until cols) {
+//                for (row in 0 until rows) {
+//                    val centerX = borderLeft + col * cellWidth
+//                    val centerY = borderTop + row * cellHeight
+//                    drawScope.drawCircle(
+//                        color = Color.Red,
+//                        radius = 9f,
+//                        center = Offset(centerX, centerY)
+//                    )
+//                }
+//            }
+
         }
     }
 }
