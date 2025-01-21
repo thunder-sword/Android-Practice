@@ -9,12 +9,32 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import kotlin.math.sqrt
 
+//棋子阵营枚举
+enum class PieceCamp {
+    RED,
+    BLACK
+}
+
+//棋子兵种枚举
+enum class PieceArm {
+    Che,
+    Jiang,  //就不写帅了，直接用将
+    Ma,
+    Pao,
+    Shi,
+    Xiang,
+    Zu      //同样也不写兵了，直接用卒
+}
+
+//完整棋子类
 class ChessPiece(
     var position: Pair<Int, Int>,  // 棋子当前坐标
     val image: ImageBitmap,       // 棋子图片
     val backImage: ImageBitmap,     // 棋子背面图片
     var isAlive: Boolean = true,   // 是否存活
-    var isFront: Boolean = false  // 是否已翻面
+    var isFront: Boolean = false,  // 是否已翻面
+    var camp: PieceCamp? = null,    // 什么阵营
+    var arm: PieceArm? = null       // 什么兵种
 ) {
     var isSelected: Boolean = false // 是否被选中
     // 动画控制
