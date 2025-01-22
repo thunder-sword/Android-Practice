@@ -42,26 +42,26 @@ class GameManager {
     private val defaultType: Map<String, List<Pair<PieceCamp, PieceArm>>> = mapOf(
         "等量经典棋数" to listOf(
             // 红方
-            Pair(PieceCamp.RED, PieceArm.Jiang),  // 将
-            Pair(PieceCamp.RED, PieceArm.Che), Pair(PieceCamp.RED, PieceArm.Che), // 两车
-            Pair(PieceCamp.RED, PieceArm.Ma), Pair(PieceCamp.RED, PieceArm.Ma),   // 两马
-            Pair(PieceCamp.RED, PieceArm.Pao), Pair(PieceCamp.RED, PieceArm.Pao), // 两炮
-            Pair(PieceCamp.RED, PieceArm.Shi), Pair(PieceCamp.RED, PieceArm.Shi), // 两士
-            Pair(PieceCamp.RED, PieceArm.Xiang), Pair(PieceCamp.RED, PieceArm.Xiang), // 两相
-            Pair(PieceCamp.RED, PieceArm.Zu), Pair(PieceCamp.RED, PieceArm.Zu),
-            Pair(PieceCamp.RED, PieceArm.Zu), Pair(PieceCamp.RED, PieceArm.Zu),
-            Pair(PieceCamp.RED, PieceArm.Zu), // 五兵
+            Pair(PieceCamp.Red, PieceArm.Jiang),  // 将
+            Pair(PieceCamp.Red, PieceArm.Che), Pair(PieceCamp.Red, PieceArm.Che), // 两车
+            Pair(PieceCamp.Red, PieceArm.Ma), Pair(PieceCamp.Red, PieceArm.Ma),   // 两马
+            Pair(PieceCamp.Red, PieceArm.Pao), Pair(PieceCamp.Red, PieceArm.Pao), // 两炮
+            Pair(PieceCamp.Red, PieceArm.Shi), Pair(PieceCamp.Red, PieceArm.Shi), // 两士
+            Pair(PieceCamp.Red, PieceArm.Xiang), Pair(PieceCamp.Red, PieceArm.Xiang), // 两相
+            Pair(PieceCamp.Red, PieceArm.Zu), Pair(PieceCamp.Red, PieceArm.Zu),
+            Pair(PieceCamp.Red, PieceArm.Zu), Pair(PieceCamp.Red, PieceArm.Zu),
+            Pair(PieceCamp.Red, PieceArm.Zu), // 五兵
 
             // 黑方
-            Pair(PieceCamp.BLACK, PieceArm.Jiang),  // 将
-            Pair(PieceCamp.BLACK, PieceArm.Che), Pair(PieceCamp.BLACK, PieceArm.Che), // 两车
-            Pair(PieceCamp.BLACK, PieceArm.Ma), Pair(PieceCamp.BLACK, PieceArm.Ma),   // 两马
-            Pair(PieceCamp.BLACK, PieceArm.Pao), Pair(PieceCamp.BLACK, PieceArm.Pao), // 两炮
-            Pair(PieceCamp.BLACK, PieceArm.Shi), Pair(PieceCamp.BLACK, PieceArm.Shi), // 两士
-            Pair(PieceCamp.BLACK, PieceArm.Xiang), Pair(PieceCamp.BLACK, PieceArm.Xiang), // 两相
-            Pair(PieceCamp.BLACK, PieceArm.Zu), Pair(PieceCamp.BLACK, PieceArm.Zu),
-            Pair(PieceCamp.BLACK, PieceArm.Zu), Pair(PieceCamp.BLACK, PieceArm.Zu),
-            Pair(PieceCamp.BLACK, PieceArm.Zu) // 五卒
+            Pair(PieceCamp.Black, PieceArm.Jiang),  // 将
+            Pair(PieceCamp.Black, PieceArm.Che), Pair(PieceCamp.Black, PieceArm.Che), // 两车
+            Pair(PieceCamp.Black, PieceArm.Ma), Pair(PieceCamp.Black, PieceArm.Ma),   // 两马
+            Pair(PieceCamp.Black, PieceArm.Pao), Pair(PieceCamp.Black, PieceArm.Pao), // 两炮
+            Pair(PieceCamp.Black, PieceArm.Shi), Pair(PieceCamp.Black, PieceArm.Shi), // 两士
+            Pair(PieceCamp.Black, PieceArm.Xiang), Pair(PieceCamp.Black, PieceArm.Xiang), // 两相
+            Pair(PieceCamp.Black, PieceArm.Zu), Pair(PieceCamp.Black, PieceArm.Zu),
+            Pair(PieceCamp.Black, PieceArm.Zu), Pair(PieceCamp.Black, PieceArm.Zu),
+            Pair(PieceCamp.Black, PieceArm.Zu) // 五卒
         )
     )
 

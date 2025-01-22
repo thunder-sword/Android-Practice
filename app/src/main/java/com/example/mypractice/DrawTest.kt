@@ -15,25 +15,31 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModelProvider
 import com.example.mypractice.ui.theme.MyPracticeTheme
 import kotlinx.coroutines.launch
 
 class DrawTest : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // 使用 ViewModelProvider 获取实例
+        val viewModel = ViewModelProvider(
+            this,
+            GameViewModelFactory(applicationContext)
+        )[GameViewModel::class.java]
+
         setContent {
             MyPracticeTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colors.background
                 ) {
-                    DrawMain()
+                    DrawMain(viewModel)
                 }
             }
         }
@@ -42,18 +48,12 @@ class DrawTest : ComponentActivity() {
 
 //画棋盘
 @Composable
-fun ChessBoard() {
+fun ChessBoard(viewModel: GameViewModel) {
     // 处理棋子状态的协程
     val coroutineScope = rememberCoroutineScope()
     // 当前被选中棋子
     val selectedPiece = remember { mutableStateOf<ChessPiece?>(null) }
 
-    // 加载棋盘图片
-    val chessBoardImage = remember { ImageBitmap.imageResource(id = R.drawable.board) }
-    // 加载棋子图片
-    val chess_b_c = ImageBitmap.imageResource(id = R.drawable.b_c)
-    // 加载棋子背面图片
-    val chess_back = ImageBitmap.imageResource(id = R.drawable.back)
     // 定义90个棋子
     val allPieces = remember {
         mutableStateListOf<ChessPiece>().apply {
@@ -62,8 +62,9 @@ fun ChessBoard() {
                     add(
                         ChessPiece(
                             position = Pair(col, row),
-                            image = chess_b_c,
-                            backImage = chess_back
+                            camp = PieceCamp.Red,
+                            arm = PieceArm.Jiang,
+                            imageLoader = viewModel.imageLoader
                         )
                     )
                 }
@@ -74,17 +75,7 @@ fun ChessBoard() {
     //初始化棋盘实例
     val chessBoard = remember {
         ChessBoard(
-            cols = 9,
-            rows = 10,
-            image = chessBoardImage,
-            paddingTopPercent = 0.02f,   // 图片顶部空白占比
-            paddingBottomPercent = 0.02f, // 图片底部空白占比
-            paddingLeftPercent = 0.03f,   // 图片左侧空白占比
-            paddingRightPercent = 0.02f,  // 图片右侧空白占比
-            borderTopPercent = 0.08f,    // 棋盘上方边框高度占有效高度的比例
-            borderBottomPercent = 0.08f, // 棋盘下方边框高度占有效高度的比例
-            borderLeftPercent = 0.05f,   // 棋盘左侧边框宽度占有效宽度的比例
-            borderRightPercent = 0.05f  // 棋盘右侧边框宽度占有效宽度的比例
+            imageLoader = viewModel.imageLoader
         )
     }
 
@@ -159,9 +150,10 @@ fun ChessBoard() {
 }
 
 
+@Suppress("PreviewAnnotationInFunctionWithParameters")
 @Preview(showBackground = true)
 @Composable
-fun DrawMain() {
-    ChessBoard()
+fun DrawMain(viewModel: GameViewModel) {
+    ChessBoard(viewModel)
 }
 

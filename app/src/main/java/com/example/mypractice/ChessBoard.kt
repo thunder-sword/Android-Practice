@@ -13,18 +13,23 @@ import kotlin.math.pow
 import kotlin.math.sqrt
 
 class ChessBoard(
-    val cols: Int,
-    val rows: Int,
-    val image: ImageBitmap,
-    val paddingTopPercent: Float,   //顶部空白区域百分比
-    val paddingBottomPercent: Float,     //底部空白区域百分比
-    val paddingLeftPercent: Float,  //左侧空白区域百分比
-    val paddingRightPercent: Float,     //右侧空白区域百分比
-    val borderTopPercent: Float,    // 棋盘上方边框高度占有效高度的比例
-    val borderBottomPercent: Float,  // 棋盘下方边框高度占有效高度的比例
-    val borderLeftPercent: Float,   // 棋盘左侧边框宽度占有效宽度的比例
-    val borderRightPercent: Float  // 棋盘右侧边框宽度占有效宽度的比例
+    val imageLoader: ImageLoader, //用于获取图片
 ) {
+    val cols: Int = 9
+    val rows: Int = 10
+
+    //图片相关信息
+    private val image: ImageBitmap = imageLoader.getImage("board")!!
+    private val paddingTopPercent: Float = 0.02f   // 图片顶部空白占比
+    private val paddingBottomPercent: Float = 0.02f // 图片底部空白占比
+    private val paddingLeftPercent: Float = 0.03f   // 图片左侧空白占比
+    private val paddingRightPercent: Float = 0.02f  // 图片右侧空白占比
+    private val borderTopPercent: Float = 0.08f    // 棋盘上方边框高度占有效高度的比例
+    private val borderBottomPercent: Float = 0.08f // 棋盘下方边框高度占有效高度的比例
+    private val borderLeftPercent: Float = 0.05f   // 棋盘左侧边框宽度占有效宽度的比例
+    private val borderRightPercent: Float = 0.05f  // 棋盘右侧边框宽度占有效宽度的比例
+
+
     // 棋盘单元格大小
     var cellWidth: Float = 0f
     var cellHeight: Float = 0f
