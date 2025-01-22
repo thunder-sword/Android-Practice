@@ -1,6 +1,7 @@
 package com.example.mypractice
 
 import androidx.compose.animation.core.*
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -31,13 +32,10 @@ class ChessPiece(
     var position: Pair<Int, Int>,  // 棋子当前坐标
     val camp: PieceCamp,    // 什么阵营
     val arm: PieceArm,       // 什么兵种
-    val imageLoader: ImageLoader, //用于获取图片
     var isAlive: Boolean = true,   // 是否存活
     var isFront: Boolean = false,  // 是否已翻面
+    var isOver: Boolean = false     // 是否位于其他棋子上层
 ) {
-    private var image: ImageBitmap = imageLoader.getImage("${camp.name.substring(0,1).lowercase()}_${arm.name.substring(0,1).lowercase()}")!!
-    private var backImage: ImageBitmap = imageLoader.getImage("back")!!
-
     var isSelected: Boolean = false // 是否被选中
     // 动画控制
     private val pairConverter = TwoWayConverter<Pair<Float, Float>, AnimationVector2D>(
@@ -85,23 +83,30 @@ class ChessPiece(
     /**
      * 绘制棋子
      * @param drawScope 当前 Canvas 的绘制范围
+     * @param imageLoader 获取图片器
      * @param borderLeft 棋盘的左侧空白部分长度
      * @param borderTop 棋盘的顶部空白部分长度
      * @param cellWidth 每个格子的宽度
      * @param cellHeight 每个格子的高度
      */
-    fun draw(drawScope: DrawScope, borderLeft: Float, borderTop: Float, cellWidth: Float, cellHeight: Float) {
+    fun draw(drawScope: DrawScope, imageLoader: ImageLoader, borderLeft: Float, borderTop: Float, cellWidth: Float, cellHeight: Float) {
+        val image: ImageBitmap = imageLoader.getImage("${camp.name.substring(0,1).lowercase()}_${arm.name.substring(0,1).lowercase()}")!!
+        val backImage: ImageBitmap = imageLoader.getImage("back")!!
         // 棋子要展示的图片
         val img = if (isFront) { image } else { backImage }
         // 棋子的位置和大小信息
         val (x, y) = position
         val centerX = borderLeft + cellWidth * x + shakingAnimation.value * shakingOffset
-        val centerY = borderTop + cellHeight * y - selectedAnimation.value.second
+        var centerY = borderTop + cellHeight * y - selectedAnimation.value.second
         val size = sqrt(cellWidth*cellWidth+cellHeight*cellHeight.toDouble()) *0.66 * selectedAnimation.value.first    //棋子的大小设定为0.66*格子的对角线长度
 
         drawScope.drawIntoCanvas { canvas ->
             val paint = Paint().apply {
                 isAntiAlias = true
+            }
+            if(isOver) {        //如果棋子在其他棋子上面，则图像改为覆盖模式，并将中心点向上偏移30
+                paint.blendMode = BlendMode.SrcOver
+                centerY -= 30
             }
 
             // 定义目标区域（图片最终绘制的位置和大小）

@@ -12,14 +12,11 @@ import androidx.compose.ui.unit.IntSize
 import kotlin.math.pow
 import kotlin.math.sqrt
 
-class ChessBoard(
-    val imageLoader: ImageLoader, //用于获取图片
-) {
+class ChessBoard {
     val cols: Int = 9
     val rows: Int = 10
 
     //图片相关信息
-    private val image: ImageBitmap = imageLoader.getImage("board")!!
     private val paddingTopPercent: Float = 0.02f   // 图片顶部空白占比
     private val paddingBottomPercent: Float = 0.02f // 图片底部空白占比
     private val paddingLeftPercent: Float = 0.03f   // 图片左侧空白占比
@@ -76,7 +73,9 @@ class ChessBoard(
     }
 
     // 绘制棋盘（包括图片裁剪逻辑）
-    fun draw(drawScope: DrawScope) {
+    fun draw(drawScope: DrawScope, imageLoader: ImageLoader) {
+        val image: ImageBitmap = imageLoader.getImage("board")!!
+
         val srcRect = Rect(
             paddingLeftPercent * image.width.toFloat(),
             paddingTopPercent * image.height.toFloat(),

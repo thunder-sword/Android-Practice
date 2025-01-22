@@ -16,8 +16,22 @@ data class PieceLocation (
 )
 
 class GameManager {
+    //当前游戏状态
     var currentState: GameState = GameState.Ended
         private set
+
+    //当前棋盘实例
+    var chessBoard: ChessBoard = ChessBoard()
+        private set
+
+    //当前游戏棋盘状态
+    var currentBoard: Array<Array<MutableList<ChessPiece>>> = Array(chessBoard.cols) { Array(chessBoard.rows) { mutableListOf() } }
+        private set
+    //当前存活的棋子列表
+    val alivePieces: Map<PieceCamp, List<ChessPiece>>
+        get() = currentBoard.flatten()  // 展平棋盘
+            .flatten()  // 展平所有棋子的列表
+            .groupBy { it.camp }  // 根据阵营分组
 
     // 所有棋子的坐标
     var piecesLayout: List<PieceLocation> = listOf()
@@ -104,6 +118,56 @@ class GameManager {
         return 0 == generalCount
     }
 
+    //作用：根据当前布局和棋子生成随机棋局
+    fun generateInitialBoard(){
+        //每次生成随机棋局都将当前棋局初始化
+        currentBoard = Array(chessBoard.cols) { Array(chessBoard.rows) { mutableListOf() } }
+        //现将布局和棋子根据阵营分类
+        val campLayout = piecesLayout.groupBy { it.camp }
+        val campType = piecesType
+            .groupBy { it.first }
+            .mapValues { (_, values) -> values.shuffled() }   //分类之后随机化一下列表 Map<PieceCamp, List<Pair<PieceCamp, PieceArm>>>
+        //先将指定阵营的布局位置分配完
+        val usedType = mutableMapOf<PieceCamp, Int>()  //用过的棋子下标长度
+        for((camp, layoutList) in campLayout){
+            if(null != camp){     //忽略不限制阵营的位置
+                val pairList = campType[camp]!!     //获取对应阵营的棋子列表
+                usedType[camp] = layoutList.size        //标记这个阵营用了几个棋子（列表前几个）
+                for((index, layout) in layoutList.withIndex()){
+                    val (_, arm) = pairList[index]
+                    currentBoard[layout.col][layout.row].add(
+                        ChessPiece(
+                            position = Pair(layout.col, layout.row),
+                            camp = camp,
+                            arm = arm
+                        )
+                    )
+                }
+            }
+        }
+        //然后剩下的不指定布局随机分配
+        // 将未标记的所有棋子放到同一个列表里，然后打乱
+        val leftTypeList = mutableListOf<Pair<PieceCamp, PieceArm>>().apply {
+            for((camp, pairList) in campType){
+                addAll(
+                    pairList.slice((usedType[camp] ?: 0) until pairList.size)
+                )
+            }
+            shuffle()
+        }
+        // 打乱后分配给不规定阵营的布局节点即可
+        for((index, layout) in (campLayout[null] ?: listOf()).withIndex()){
+            val (camp, arm) = leftTypeList[index]
+            currentBoard[layout.col][layout.row].add(
+                ChessPiece(
+                    position = Pair(layout.col, layout.row),
+                    camp = camp,
+                    arm = arm
+                )
+            )
+        }
+    }
+
     @SuppressLint("AssertionSideEffect")
     fun startGame() {
         if (currentState == GameState.Ended) {
@@ -115,6 +179,9 @@ class GameManager {
             piecesType = defaultType["等量经典棋数"]!!
             //检查布局和棋子数是否适合
             assert(checkMatch())
+
+            //如果合适则自动生成随机棋局
+            generateInitialBoard()
         } else {
             println("Game is already running.")
             return
