@@ -1,5 +1,7 @@
 package com.example.mypractice
 
+import android.annotation.SuppressLint
+
 //游戏状态枚举
 enum class GameState {
     Running,
@@ -18,9 +20,11 @@ class GameManager {
         private set
 
     // 所有棋子的坐标
-    private var piecesLayout: List<PieceLocation> = listOf()
+    var piecesLayout: List<PieceLocation> = listOf()
+        private set
     // 所有棋子的类型
-    private var piecesType: List<Pair<PieceCamp, PieceArm>> = listOf()
+    var piecesType: List<Pair<PieceCamp, PieceArm>> = listOf()
+        private set
 
     // 内置棋子坐标
     private val defaultLayout: Map<String, List<PieceLocation>> = mapOf(
@@ -100,21 +104,21 @@ class GameManager {
         return 0 == generalCount
     }
 
+    @SuppressLint("AssertionSideEffect")
     fun startGame() {
         if (currentState == GameState.Ended) {
             currentState = GameState.Running
             println("Game started! Current state: $currentState")
+
+            //给当前布局和棋子数赋值
+            piecesLayout = defaultLayout["十字交叉型"]!!
+            piecesType = defaultType["等量经典棋数"]!!
+            //检查布局和棋子数是否适合
+            assert(checkMatch())
         } else {
             println("Game is already running.")
             return
         }
-
-        //给当前布局和棋子数赋值
-        piecesLayout = defaultLayout["十字交叉型"]!!
-        piecesType = defaultType["等量经典棋数"]!!
-
-        //通过名字获取图片id
-        //val resourceId = context.resources.getIdentifier(resourceName, "drawable", context.packageName)
     }
 
     fun endGame() {
@@ -131,12 +135,12 @@ class GameManager {
     }
 }
 
-fun main() {
-    val gameManager = GameManager()
-
-    println(gameManager.getStatus()) // 初始状态
-    gameManager.startGame()          // 启动游戏
-    println(gameManager.getStatus()) // 游戏状态
-    gameManager.endGame()            // 结束游戏
-    println(gameManager.getStatus()) // 游戏状态
-}
+//fun main() {
+//    val gameManager = GameManager()
+//
+//    println(gameManager.getStatus()) // 初始状态
+//    gameManager.startGame()          // 启动游戏
+//    println(gameManager.getStatus()) // 游戏状态
+//    gameManager.endGame()            // 结束游戏
+//    println(gameManager.getStatus()) // 游戏状态
+//}

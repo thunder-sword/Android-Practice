@@ -49,28 +49,13 @@ class DrawTest : ComponentActivity() {
 //画棋盘
 @Composable
 fun ChessBoard(viewModel: GameViewModel) {
+    //初始化游戏管理器
+    val gameManager = remember { GameManager() }
+
     // 处理棋子状态的协程
     val coroutineScope = rememberCoroutineScope()
     // 当前被选中棋子
     val selectedPiece = remember { mutableStateOf<ChessPiece?>(null) }
-
-    // 定义90个棋子
-    val allPieces = remember {
-        mutableStateListOf<ChessPiece>().apply {
-            for (col in 0..8) {
-                for (row in 0..9) {
-                    add(
-                        ChessPiece(
-                            position = Pair(col, row),
-                            camp = PieceCamp.Red,
-                            arm = PieceArm.Jiang,
-                            imageLoader = viewModel.imageLoader
-                        )
-                    )
-                }
-            }
-        }
-    }
 
     //初始化棋盘实例
     val chessBoard = remember {
@@ -78,6 +63,49 @@ fun ChessBoard(viewModel: GameViewModel) {
             imageLoader = viewModel.imageLoader
         )
     }
+
+    //启动游戏
+    gameManager.startGame()
+    //生成随机序列，用于放置棋子
+    val randomIndices : List<Int> = remember { (0 until gameManager.piecesType.size).shuffled() }
+    var pieceIndex: Int = remember { 0 }
+    //从游戏管理器里读取棋子状态和布局，并初始化
+    val allPieces = remember {
+        mutableStateListOf<ChessPiece>().apply {
+            for (location in gameManager.piecesLayout){
+                val (camp, arm) = gameManager.piecesType[randomIndices[pieceIndex]]
+                add(
+                    ChessPiece(
+                        position = Pair(location.col, location.row),
+                        camp = camp,
+                        arm = arm,
+                        imageLoader = viewModel.imageLoader
+                    )
+                )
+                pieceIndex++
+            }
+        }
+    }
+
+//    // 定义90个棋子
+//    val allPieces = remember {
+//        mutableStateListOf<ChessPiece>().apply {
+//            for (col in 0..8) {
+//                for (row in 0..9) {
+//                    add(
+//                        ChessPiece(
+//                            position = Pair(col, row),
+//                            camp = PieceCamp.Red,
+//                            arm = PieceArm.Jiang,
+//                            imageLoader = viewModel.imageLoader
+//                        )
+//                    )
+//                }
+//            }
+//        }
+//    }
+//
+
 
     // 屏幕宽高获取
     val maxWidth = LocalConfiguration.current.screenWidthDp.dp // 最大宽度占屏幕宽度的100%
