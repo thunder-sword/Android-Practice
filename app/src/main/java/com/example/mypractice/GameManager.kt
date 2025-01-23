@@ -1,7 +1,7 @@
 package com.example.mypractice
 
 import android.annotation.SuppressLint
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.*
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Paint
@@ -33,7 +33,7 @@ class GameManager(
     private val tapScope: CoroutineScope    //在点击事件发生时发起协程，只有在Composable函数创建才能使用动画
 ) {
     //当前游戏状态
-    var currentState: GameState = GameState.Ended
+    var currentState: MutableState<GameState> = mutableStateOf(GameState.Ended)
         private set
 
     //棋盘实例
@@ -43,16 +43,21 @@ class GameManager(
     //玩家序列，直接用阵营表示
     val players: Array<PieceCamp> = PieceCamp.values()
     //当前行动玩家
-    var currentPlayer: Int = 0
+    var currentPlayer by mutableStateOf(0)
 
     //当前游戏棋盘状态
     var currentBoard: Array<Array<MutableList<ChessPiece>>> = Array(chessBoard.cols) { Array(chessBoard.rows) { mutableListOf() } }
         private set
     //当前存活的棋子列表
-    val alivePieces: Map<PieceCamp, List<ChessPiece>>
+    val alivePieces: MutableList<ChessPiece>
         get() = currentBoard.flatten()  // 展平棋盘
             .flatten()  // 展平所有棋子的列表
-            .groupBy { it.camp }  // 根据阵营分组
+            .toMutableStateList()
+            //.groupBy { it.camp }  // 根据阵营分组
+    //当前可触发的棋子列表（每叠棋子最上面那个）
+    val canTapPieces: List<ChessPiece>
+        get() = currentBoard.flatten()  //展平棋盘
+            .mapNotNull { it.lastOrNull() }       //只取最后一个棋子
 
     // 所有棋子的坐标
     var piecesLayout: List<PieceLocation> = listOf()
@@ -254,7 +259,8 @@ class GameManager(
     fun handleTap(offset: Offset){
         val (col, row) = chessBoard.offsetToChessIndex(offset)
         println("点击了棋盘的坐标：列 $col, 行 $row")
-        val clickedPiece: ChessPiece? = alivePieces.values.flatten().find { it.isAlive && it.position == Pair(col, row) }
+        //只取每一叠象棋最上面那个棋子进行判断
+        val clickedPiece: ChessPiece? = canTapPieces.find { it.isAlive && it.position == Pair(col, row) }
 
         tapScope.launch {
             //加锁，使每次事件引起的状态变化顺序进行
@@ -295,20 +301,24 @@ class GameManager(
                         if(0 == currentBoard[col][row].size){
                             currentBoard[col][row].add(selectedPiece.value!!)
                         }
-                        //(2)如果有棋子则判断，棋子是否是反面，反面就放到它上面
-                        else if(!currentBoard[col][row][0].isFront){
+                        //(2)如果有棋子则判断最上面那个棋子，棋子是否是反面，反面就放到它上面
+                        else if(!currentBoard[col][row].last().isFront){
                             selectedPiece.value?.isOver=true
                             currentBoard[col][row].add(selectedPiece.value!!)
                         }
-                        //(3)正面就吃掉它
+                        //(3)正面就吃掉它，同样判断最上面的棋子
                         else{
-                            val ateCamp = currentBoard[col][row][0].camp
-                            currentBoard[col][row][0].isAlive=false     //棋子被吃掉了
-                            currentBoard[col][row].removeAt(0)
+                            //如果被吃掉的棋子在其他棋子上面，本棋子要继承此状态
+                            if(currentBoard[col][row].last().isOver){
+                                selectedPiece.value?.isOver = true
+                            }
+                            val ateCamp = currentBoard[col][row].last().camp
+                            currentBoard[col][row].last().isAlive=false     //棋子被吃掉了
+                            currentBoard[col][row].removeLast()
                             currentBoard[col][row].add(selectedPiece.value!!)
                             //如果对面棋子全部被吃完，游戏结束
-                            if(0 == alivePieces[ateCamp]?.size){
-                                currentState = GameState.Ended
+                            if(0 == (alivePieces.groupBy { it.camp }[ateCamp]?.size ?: 0)){
+                                endGame()
                             }
                         }
                         //取消选中棋子
@@ -349,9 +359,9 @@ class GameManager(
 
     @SuppressLint("AssertionSideEffect")
     fun startGame() {
-        if (currentState == GameState.Ended) {
-            currentState = GameState.Running
-            println("Game started! Current state: $currentState")
+        if (currentState.value == GameState.Ended) {
+            currentState.value = GameState.Running
+            println("Game started! Current state: ${currentState.value}")
 
             //给当前布局和棋子数赋值
             piecesLayout = defaultLayout["十字交叉型"]!!
@@ -371,16 +381,12 @@ class GameManager(
     }
 
     fun endGame() {
-        if (currentState == GameState.Running) {
-            currentState = GameState.Ended
-            println("Game ended! Current state: $currentState")
+        if (currentState.value == GameState.Running) {
+            currentState.value = GameState.Ended
+            println("Game ended! Current state: ${currentState.value}")
         } else {
             println("Game is already ended.")
         }
-    }
-
-    fun getStatus(): String {
-        return "Current game state: $currentState"
     }
 }
 

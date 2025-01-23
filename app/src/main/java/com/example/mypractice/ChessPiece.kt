@@ -30,7 +30,7 @@ enum class PieceArm {
 class ChessPiece(
     var position: Pair<Int, Int>,  // 棋子当前坐标
     val camp: PieceCamp,    // 什么阵营
-    val arm: PieceArm,       // 什么兵种
+    var arm: PieceArm,       // 什么兵种
     var isAlive: Boolean = true,   // 是否存活
     var isFront: Boolean = false,  // 是否已翻面
     var isOver: Boolean = false     // 是否位于其他棋子上层
@@ -149,25 +149,6 @@ class ChessPiece(
         fun canCapture(board: Array<Array<MutableList<ChessPiece>>>, col: Int, row: Int): Boolean =
             board[col][row].any { it.isFront && it.camp != camp } // 目标位置有正面敌方棋子
 
-        // 辅助函数：判断是否可跳跃吃子
-        fun canJumpToCapture(board: Array<Array<MutableList<ChessPiece>>>, position: Pair<Int, Int>, col: Int, row: Int): Boolean {
-            val startCol = position.first
-            val startRow = position.second
-
-            // 判断横向或纵向是否可以跳跃
-            if (startRow == row) {
-                val range = if (startCol < col) (startCol + 1 until col) else (col + 1 until startCol)
-                val blockers = range.map { board[it][row] }.count { column -> column.any { it.isFront } }
-                return blockers == 1 && board[col][row].any { it.isFront && it.camp != camp }
-            } else if (startCol == col) {
-                val range = if (startRow < row) (startRow + 1 until row) else (row + 1 until startRow)
-                val blockers = range.map { board[col][it] }.count { row -> row.any { it.isFront } }
-                return blockers == 1 && board[col][row].any { it.isFront && it.camp != camp }
-            }
-
-            return false
-        }
-
         // 返回值列表
         val possibleLocations = mutableListOf<Pair<Int, Int>>()
 
@@ -224,58 +205,77 @@ class ChessPiece(
             PieceArm.Pao -> {
                 // 炮：与车类似，但吃子需要隔一跳
                 for (i in -1..1 step 2) {
+                    // 水平方向
+                    var hasJumped = false
                     for (deltaCol in 1..8) {
                         val targetCol = position.first + deltaCol * i
                         if (isValidPosition(targetCol, position.second)) {
-                            if (isPathClear(currentBoard, targetCol, position.second)) {
-                                possibleLocations.add(Pair(targetCol, position.second))
-                            } else if (canJumpToCapture(currentBoard, position, targetCol, position.second)) {
-                                possibleLocations.add(Pair(targetCol, position.second))
-                                break
-                            } else break
-                        }
+                            if (!hasJumped) {
+                                if (isPathClear(currentBoard, targetCol, position.second)) {
+                                    possibleLocations.add(Pair(targetCol, position.second))
+                                } else {
+                                    hasJumped = true // 第一次遇到阻挡
+                                }
+                            } else {
+                                if (canCapture(currentBoard, targetCol, position.second)) {
+                                    possibleLocations.add(Pair(targetCol, position.second))
+                                    break // 找到跳跃目标后结束当前方向
+                                } else if (!isPathClear(currentBoard, targetCol, position.second)) {
+                                    break // 如果遇到其他阻挡，结束当前方向
+                                }
+                            }
+                        } else break // 超出棋盘范围，结束当前方向
                     }
+
+                    // 垂直方向
+                    hasJumped = false
                     for (deltaRow in 1..9) {
                         val targetRow = position.second + deltaRow * i
                         if (isValidPosition(position.first, targetRow)) {
-                            if (isPathClear(currentBoard, position.first, targetRow)) {
-                                possibleLocations.add(Pair(position.first, targetRow))
-                            } else if (canJumpToCapture(currentBoard, position, position.first, targetRow)) {
-                                possibleLocations.add(Pair(position.first, targetRow))
-                                break
-                            } else break
-                        }
+                            if (!hasJumped) {
+                                if (isPathClear(currentBoard, position.first, targetRow)) {
+                                    possibleLocations.add(Pair(position.first, targetRow))
+                                } else {
+                                    hasJumped = true // 第一次遇到阻挡
+                                }
+                            } else {
+                                if (canCapture(currentBoard, position.first, targetRow)) {
+                                    possibleLocations.add(Pair(position.first, targetRow))
+                                    break // 找到跳跃目标后结束当前方向
+                                } else if (!isPathClear(currentBoard, position.first, targetRow)) {
+                                    break // 如果遇到其他阻挡，结束当前方向
+                                }
+                            }
+                        } else break // 超出棋盘范围，结束当前方向
                     }
                 }
             }
+
             PieceArm.Jiang -> {
-                // 将/帅：九宫格内移动，一次一格
-                val kingMoves = listOf(Pair(1, 0), Pair(-1, 0), Pair(0, 1), Pair(0, -1))
-                val palaceCols = 3..5
-                val palaceRows = if (camp == PieceCamp.Red) 7..9 else 0..2
-                for (move in kingMoves) {
-                    val targetCol = position.first + move.first
-                    val targetRow = position.second + move.second
-                    if (isValidPosition(targetCol, targetRow) &&
-                        targetCol in palaceCols && targetRow in palaceRows
-                    ) {
-                        if (canCapture(currentBoard, targetCol, targetRow) || isPathClear(currentBoard, targetCol, targetRow)) {
-                            possibleLocations.add(Pair(targetCol, targetRow))
-                        }
-                    }
-                }
+                // 将/帅：返回（车、马、炮、士、象）能走的所有位置（车包含卒）
+                val tmpList = mutableListOf<Pair<Int, Int>>()
+                arm = PieceArm.Che
+                tmpList.addAll(canToLocation(currentBoard))
+                arm = PieceArm.Ma
+                tmpList.addAll(canToLocation(currentBoard))
+                arm = PieceArm.Pao
+                tmpList.addAll(canToLocation(currentBoard))
+                arm = PieceArm.Shi
+                tmpList.addAll(canToLocation(currentBoard))
+                arm = PieceArm.Xiang
+                tmpList.addAll(canToLocation(currentBoard))
+                //将兵种改回去
+                arm = PieceArm.Jiang
+                //去除列表重复元素，加入最后列表中
+                possibleLocations.addAll(tmpList.distinct())
             }
             PieceArm.Shi -> {
-                // 士：九宫格内斜线移动
+                // 士：斜线移动
                 val advisorMoves = listOf(Pair(1, 1), Pair(1, -1), Pair(-1, 1), Pair(-1, -1))
-                val palaceCols = 3..5
-                val palaceRows = if (camp == PieceCamp.Red) 7..9 else 0..2
                 for (move in advisorMoves) {
                     val targetCol = position.first + move.first
                     val targetRow = position.second + move.second
-                    if (isValidPosition(targetCol, targetRow) &&
-                        targetCol in palaceCols && targetRow in palaceRows
-                    ) {
+                    if (isValidPosition(targetCol, targetRow)) {
                         if (canCapture(currentBoard, targetCol, targetRow) || isPathClear(currentBoard, targetCol, targetRow)) {
                             possibleLocations.add(Pair(targetCol, targetRow))
                         }
@@ -283,16 +283,14 @@ class ChessPiece(
                 }
             }
             PieceArm.Xiang -> {
-                // 象：斜线移动两格，不能过河
+                // 象：斜线移动两格，能过河
                 val bishopMoves = listOf(Pair(2, 2), Pair(2, -2), Pair(-2, 2), Pair(-2, -2))
-                val riverBoundary = if (camp == PieceCamp.Red) 4 else 5
                 for (move in bishopMoves) {
                     val targetCol = position.first + move.first
                     val targetRow = position.second + move.second
                     val midCol = position.first + move.first / 2
                     val midRow = position.second + move.second / 2
                     if (isValidPosition(targetCol, targetRow) &&
-                        (if (camp == PieceCamp.Red) targetRow >= riverBoundary else targetRow <= riverBoundary) &&
                         isPathClear(currentBoard, midCol, midRow)
                     ) {
                         if (canCapture(currentBoard, targetCol, targetRow) || isPathClear(currentBoard, targetCol, targetRow)) {

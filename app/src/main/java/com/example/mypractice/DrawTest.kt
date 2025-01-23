@@ -6,12 +6,8 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.MaterialTheme
-import androidx.compose.material.Surface
-import androidx.compose.material.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -58,23 +54,81 @@ fun ChessBoard(viewModel: GameViewModel) {
     //启动游戏
     gameManager.startGame()
 
-    //从游戏管理器里读取棋子状态和布局，并初始化
-    val alivePieces: List<ChessPiece> = remember { gameManager.alivePieces.flatMap { it.value } }
-
     //根据屏幕宽高获取棋盘宽高
     val (chessBoardWidth, chessBoardHeight) =
         gameManager.getBoardSize(LocalConfiguration.current.screenWidthDp.dp, LocalConfiguration.current.screenHeightDp.dp)
 
+
+    // 用于控制弹窗是否显示
+    var showDialog by remember { mutableStateOf(false) }
+
+    // 监听 gameManager.currentState 的状态变化
+    LaunchedEffect(gameManager.currentState) {
+        if (gameManager.currentState.value == GameState.Ended) {
+            showDialog = true
+        }
+    }
+
+    // 显示弹窗
+    if (showDialog) {
+        AlertDialog(
+            onDismissRequest = { /* 不允许点击外部关闭弹窗 */ },
+            title = { Text(text = "游戏结束") },
+            text = { Text(text = "是否要重新开始游戏？") },
+            confirmButton = {
+                Button(onClick = {
+                    // 重置游戏状态
+                    gameManager.startGame()
+                    showDialog = false
+                }) {
+                    Text("重新开始")
+                }
+            },
+            dismissButton = {
+                Button(onClick = {
+                    // 关闭弹窗
+                    showDialog = false
+                }) {
+                    Text("退出")
+                }
+            }
+        )
+    }
+
+
+    Box(
+        contentAlignment = Alignment.TopStart
+    ){
+        Button(
+            onClick = {
+                //重启游戏
+                gameManager.endGame()
+                gameManager.startGame()
+            }
+        ){
+            Text(text = "重新开始")
+        }
+    }
+
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.End
+        modifier = Modifier
+            .graphicsLayer {
+                scaleX = -1f
+                scaleY = -1f
+                           }, // 垂直对角翻转180度
+        verticalAlignment = Alignment.Bottom,
+        horizontalArrangement = Arrangement.Start
     ){
         Text(
-            "Player2",
-            color = Color.Red,
-            fontSize = 40.sp,
-            modifier = Modifier.graphicsLayer { scaleY = -1f } // 垂直翻转180度
+            "玩家2",
+            color = Color.Blue,
+            fontSize = 40.sp
+        )
+        Text(
+            text = " ${gameManager.alivePieces.groupBy { it.camp }[PieceCamp.Black]?.size ?: 0}"
+                    + if(1==gameManager.currentPlayer) { "【轮到你了】" } else "",
+            color = Color.Blue,
+            fontSize = 30.sp
         )
     }
 
@@ -99,7 +153,7 @@ fun ChessBoard(viewModel: GameViewModel) {
             gameManager.chessBoard.draw(this, imageLoader = viewModel.imageLoader)
 
             // 绘制棋子图片
-            for (piece in alivePieces) {
+            for (piece in gameManager.alivePieces) {
                 piece.draw(
                     this,
                     imageLoader = viewModel.imageLoader,
@@ -123,15 +177,19 @@ fun ChessBoard(viewModel: GameViewModel) {
     }
 
     Row(
-        modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.Bottom,
         horizontalArrangement = Arrangement.Start
     ){
         Text(
-            "Player1",
-            color = Color.Black,
+            "玩家1",
+            color = Color.Red,
             fontSize = 40.sp,
-
+        )
+        Text(
+            text = " ${gameManager.alivePieces.groupBy { it.camp }[PieceCamp.Red]?.size ?: 0}"
+                    + if(0==gameManager.currentPlayer) { "【轮到你了】" } else "",
+            color = Color.Red,
+            fontSize = 30.sp
         )
     }
 }
