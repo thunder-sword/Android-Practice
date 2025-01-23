@@ -1,6 +1,20 @@
 package com.example.mypractice
 
 import android.annotation.SuppressLint
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlin.math.sqrt
 
 //游戏状态枚举
 enum class GameState {
@@ -15,14 +29,21 @@ data class PieceLocation (
     val camp: PieceCamp? = null
 )
 
-class GameManager {
+class GameManager(
+    private val tapScope: CoroutineScope    //在点击事件发生时发起协程，只有在Composable函数创建才能使用动画
+) {
     //当前游戏状态
     var currentState: GameState = GameState.Ended
         private set
 
-    //当前棋盘实例
+    //棋盘实例
     var chessBoard: ChessBoard = ChessBoard()
         private set
+
+    //玩家序列，直接用阵营表示
+    val players: Array<PieceCamp> = PieceCamp.values()
+    //当前行动玩家
+    var currentPlayer: Int = 0
 
     //当前游戏棋盘状态
     var currentBoard: Array<Array<MutableList<ChessPiece>>> = Array(chessBoard.cols) { Array(chessBoard.rows) { mutableListOf() } }
@@ -82,6 +103,28 @@ class GameManager {
             Pair(PieceCamp.Black, PieceArm.Zu) // 五卒
         )
     )
+
+    // 当前被选中棋子
+    val selectedPiece = mutableStateOf<ChessPiece?>(null)
+    // 点击事件锁
+    private val tapMutex = Mutex()
+    // 可到达位置序列
+    val canToLocation: List<Pair<Int, Int>>
+        get() = if (true == selectedPiece.value?.isFront) { selectedPiece.value?.canToLocation(currentBoard) ?: listOf() } else { listOf() }
+
+    // 返回放大棋盘后的宽高
+    fun getBoardSize(screenWidth: Dp, screenHeight: Dp, percent: Float=1f): Pair<Dp, Dp>{
+        val maxWidth = screenWidth * percent
+        val maxHeight = screenHeight * percent
+        // 计算棋盘适配后的宽高（大概运算，使图片等比扩大）
+        val chessBoardWidth = if (maxWidth * chessBoard.rows / chessBoard.cols <= maxHeight) {
+            maxWidth
+        } else {
+            maxHeight * chessBoard.cols / chessBoard.rows
+        }
+        val chessBoardHeight = chessBoardWidth * chessBoard.rows / chessBoard.cols
+        return Pair(chessBoardWidth, chessBoardHeight)
+    }
 
     //检验当前布局和棋子数是否匹配
     fun checkMatch(): Boolean {
@@ -168,6 +211,142 @@ class GameManager {
         }
     }
 
+    /**
+     * 绘制棋子
+     * @param drawScope 当前 Canvas 的绘制范围
+     * @param imageLoader 获取图片器
+     * @param borderLeft 棋盘的左侧空白部分长度
+     * @param borderTop 棋盘的顶部空白部分长度
+     * @param cellWidth 每个格子的宽度
+     * @param cellHeight 每个格子的高度
+     */
+    fun drawBox(drawScope: DrawScope, imageLoader: ImageLoader, borderLeft: Float, borderTop: Float, cellWidth: Float, cellHeight: Float) {
+        val image: ImageBitmap = imageLoader.getImage("r_box")!!
+        for((x, y) in canToLocation) {
+            val centerX = borderLeft + cellWidth * x
+            val centerY = borderTop + cellHeight * y
+            val size =
+                sqrt(cellWidth * cellWidth + cellHeight * cellHeight.toDouble()) * 0.68 //提示格的大小设定为0.70*格子的对角线长度
+
+            drawScope.drawIntoCanvas { canvas ->
+                val paint = Paint().apply {
+                    isAntiAlias = true
+                }
+
+                // 定义目标区域（图片最终绘制的位置和大小）
+                val dstOffset = IntOffset(
+                    (centerX - size / 2).toInt(),
+                    (centerY - size / 2).toInt()
+                )
+                val dstSize = IntSize(size.toInt(), size.toInt())
+                // 绘制图片
+                canvas.drawImageRect(
+                    image = image,
+                    dstOffset = dstOffset,
+                    dstSize = dstSize,
+                    paint = paint
+                )
+            }
+        }
+    }
+
+    //作用：处理点击事件
+    fun handleTap(offset: Offset){
+        val (col, row) = chessBoard.offsetToChessIndex(offset)
+        println("点击了棋盘的坐标：列 $col, 行 $row")
+        val clickedPiece: ChessPiece? = alivePieces.values.flatten().find { it.isAlive && it.position == Pair(col, row) }
+
+        tapScope.launch {
+            //加锁，使每次事件引起的状态变化顺序进行
+            tapMutex.withLock {
+                //1.如果当前没有选择棋子
+                if(null == selectedPiece.value) {
+                    //1.1.如果棋子是背面，则选中该棋子
+                    //1.2.如果选择是当前玩家阵营的棋子，则选中该棋子（自动管理可到达位置序列）
+                    if(false == clickedPiece?.isFront || players[currentPlayer] == clickedPiece?.camp){
+                        selectedPiece.value=clickedPiece
+                        selectedPiece.value?.select()
+                    }
+                }
+                //2.如果当前选择了棋子
+                else {
+                    //2.1.如果还是点击此棋子，并且棋子是反面，则翻面【翻面后切换玩家】
+                    if(false == clickedPiece?.isFront && clickedPiece == selectedPiece.value){
+                        selectedPiece.value?.toFront()
+                        //取消选中棋子
+                        selectedPiece.value?.deselect()
+                        selectedPiece.value = null
+                        currentPlayer = ( currentPlayer + 1) % players.size
+                    }
+                    //2.2.如果点击位置不在可到达坐标序列中则取消选中该棋子
+                    else if(null == canToLocation.find{ it == Pair(col, row) }){
+                        selectedPiece.value?.deselect()
+                        selectedPiece.value = null
+                    }
+                    //2.3.如果点击位置在可到达坐标序列则跳到可到达坐标（将isOver标记为false，如果到达点有背面棋子则标记棋子isOver，如果吃了棋子则删除目标棋子，更新棋子坐标和currentBoard
+                    //吃掉棋子之后要判断被吃掉的棋子阵营是否还有存活棋子，没有则结束游戏）【移动棋子后切换当前玩家】
+                    else{
+                        //切换当前坐标
+                        selectedPiece.value?.isOver=false
+                        currentBoard[selectedPiece.value?.position!!.first][selectedPiece.value?.position!!.second].remove(selectedPiece.value)
+                        selectedPiece.value?.position=Pair(col, row)
+                        //处理目标节点
+                        //(1)如果目标没放棋子，直接放那即可
+                        if(0 == currentBoard[col][row].size){
+                            currentBoard[col][row].add(selectedPiece.value!!)
+                        }
+                        //(2)如果有棋子则判断，棋子是否是反面，反面就放到它上面
+                        else if(!currentBoard[col][row][0].isFront){
+                            selectedPiece.value?.isOver=true
+                            currentBoard[col][row].add(selectedPiece.value!!)
+                        }
+                        //(3)正面就吃掉它
+                        else{
+                            val ateCamp = currentBoard[col][row][0].camp
+                            currentBoard[col][row][0].isAlive=false     //棋子被吃掉了
+                            currentBoard[col][row].removeAt(0)
+                            currentBoard[col][row].add(selectedPiece.value!!)
+                            //如果对面棋子全部被吃完，游戏结束
+                            if(0 == alivePieces[ateCamp]?.size){
+                                currentState = GameState.Ended
+                            }
+                        }
+                        //取消选中棋子
+                        selectedPiece.value?.deselect()
+                        selectedPiece.value = null
+                        currentPlayer = ( currentPlayer + 1) % players.size
+                    }
+                }
+            }
+        }
+
+//        tapScope.launch {
+//            //加锁，使每次事件引起的状态变化顺序进行
+//            tapMutex.withLock {
+//                //如果棋子被点击则切换其被选择状态
+//                val clickedPiece =
+//                    alivePieces.values.flatten()
+//                        .find { it.isAlive && it.position == Pair(col, row) }
+//
+//                //1.如果原来选中了棋子，而且不是再次点击的棋子，则直接取消选择棋子
+//                if (null != selectedPiece.value) {
+//                    //1.1.如果是原来的棋子，而且棋子是背面的，先翻面再取消选择（正面直接取消选择）
+//                    if (clickedPiece == selectedPiece.value && false == clickedPiece?.isFront) {
+//                        selectedPiece.value?.toFront()
+//                    }
+//                    selectedPiece.value?.deselect()
+//                    selectedPiece.value = null
+//                } else { //2.否则判断是否点中棋子，如果点中则选中，否则不操作
+//                    // 切换选中状态
+//                        clickedPiece?.select()
+//                        selectedPiece.value = clickedPiece
+//                }
+//            }
+//        }
+
+        //完成移动事件之后【不应该在这里】，如果移动到的位置已有象棋，应把该象棋标记为isOver
+    }
+
     @SuppressLint("AssertionSideEffect")
     fun startGame() {
         if (currentState == GameState.Ended) {
@@ -182,6 +361,9 @@ class GameManager {
 
             //如果合适则自动生成随机棋局
             generateInitialBoard()
+
+            //随机选择先手玩家
+            currentPlayer = (0..players.size - 1).random()
         } else {
             println("Game is already running.")
             return
