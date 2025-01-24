@@ -218,6 +218,77 @@ class GameManager(
         }
     }
 
+    //将棋局序列化为字符串
+    fun serializeChessBoard(board: Array<Array<MutableList<ChessPiece>>>): String {
+        val stringBuilder = StringBuilder()
+
+        for (row in board) {
+            for (col in row) {
+                if (col.isNotEmpty()) {
+                    // 如果格子里有多个棋子，将它们的序列化信息用逗号分隔
+                    col.forEach { piece ->
+                        val pieceCampChar = piece.camp.name[0]
+                        val pieceArmChar = piece.arm.name[0]
+                        val frontChar = if (piece.isFront) 'F' else 'B'
+                        val overChar = if (piece.isOver) 'O' else 'N'
+
+                        // 将棋子信息拼接成一个4个字符的字符串
+                        stringBuilder.append("$pieceCampChar$pieceArmChar$frontChar$overChar,")
+                    }
+                    // 去掉最后一个逗号
+                    stringBuilder.deleteCharAt(stringBuilder.length - 1)
+                } else {
+                    stringBuilder.append("    ")  // 空格表示没有棋子，每格四个字符
+                }
+            }
+        }
+        return stringBuilder.toString()
+    }
+
+    //将字符串反序列化为棋局
+    fun deserializeChessBoard(serializedBoard: String): Array<Array<MutableList<ChessPiece>>> {
+        val board = Array(9) { Array(10) { mutableListOf<ChessPiece>() } }
+        var index = 0
+
+        for (row in 0 until 9) {
+            for (col in 0 until 10) {
+                val pieceString = serializedBoard.substring(index, index + 4)  // 每个棋子占4个字符
+                index += 4
+
+                if (pieceString.trim() != "") {  // 如果该位置有棋子
+                    val piecesInfo = pieceString.split(",")  // 用逗号分隔不同棋子的序列化信息
+
+                    piecesInfo.forEach { pieceStr ->
+                        val pieceCamp = when (pieceStr[0]) {
+                            'R' -> PieceCamp.Red
+                            'B' -> PieceCamp.Black
+                            else -> throw IllegalArgumentException("Invalid camp")
+                        }
+
+                        val pieceArm = when (pieceStr[1]) {
+                            'C' -> PieceArm.Che
+                            'J' -> PieceArm.Jiang
+                            'M' -> PieceArm.Ma
+                            'P' -> PieceArm.Pao
+                            'S' -> PieceArm.Shi
+                            'X' -> PieceArm.Xiang
+                            'Z' -> PieceArm.Zu
+                            else -> throw IllegalArgumentException("Invalid arm")
+                        }
+
+                        val isFront = pieceStr[2] == 'F'
+                        val isOver = pieceStr[3] == 'O'
+
+                        val position = Pair(row, col)
+                        val chessPiece = ChessPiece(position, pieceCamp, pieceArm, isAlive = true, isFront, isOver)
+                        board[row][col].add(chessPiece)
+                    }
+                }
+            }
+        }
+        return board
+    }
+
     /**
      * 绘制棋子
      * @param drawScope 当前 Canvas 的绘制范围
