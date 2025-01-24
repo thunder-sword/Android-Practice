@@ -33,7 +33,7 @@ class GameManager(
     private val tapScope: CoroutineScope    //在点击事件发生时发起协程，只有在Composable函数创建才能使用动画
 ) {
     //当前游戏状态
-    var currentState: MutableState<GameState> = mutableStateOf(GameState.Ended)
+    var currentState by mutableStateOf(GameState.Ended)
         private set
 
     //棋盘实例
@@ -118,16 +118,18 @@ class GameManager(
         get() = if (true == selectedPiece.value?.isFront) { selectedPiece.value?.canToLocation(currentBoard) ?: listOf() } else { listOf() }
 
     // 返回放大棋盘后的宽高
-    fun getBoardSize(screenWidth: Dp, screenHeight: Dp, percent: Float=1f): Pair<Dp, Dp>{
+    fun getBoardSize(screenWidth: Dp, screenHeight: Dp, percent: Float = 1f): Pair<Dp, Dp> {
         val maxWidth = screenWidth * percent
         val maxHeight = screenHeight * percent
-        // 计算棋盘适配后的宽高（大概运算，使图片等比扩大）
-        val chessBoardWidth = if (maxWidth * chessBoard.rows / chessBoard.cols <= maxHeight) {
+        val aspectRatio = chessBoard.rows.toFloat() / chessBoard.cols
+
+        // 计算等比宽高
+        val chessBoardWidth = if (maxWidth * aspectRatio <= maxHeight) {
             maxWidth
         } else {
-            maxHeight * chessBoard.cols / chessBoard.rows
+            maxHeight / aspectRatio
         }
-        val chessBoardHeight = chessBoardWidth * chessBoard.rows / chessBoard.cols
+        val chessBoardHeight = chessBoardWidth * aspectRatio
         return Pair(chessBoardWidth, chessBoardHeight)
     }
 
@@ -259,12 +261,13 @@ class GameManager(
     fun handleTap(offset: Offset){
         val (col, row) = chessBoard.offsetToChessIndex(offset)
         println("点击了棋盘的坐标：列 $col, 行 $row")
-        //只取每一叠象棋最上面那个棋子进行判断
-        val clickedPiece: ChessPiece? = canTapPieces.find { it.isAlive && it.position == Pair(col, row) }
 
         tapScope.launch {
             //加锁，使每次事件引起的状态变化顺序进行
             tapMutex.withLock {
+                //只取每一叠象棋最上面那个棋子进行判断（这个不加锁就会导致点不到的棋子被点到）
+                val clickedPiece: ChessPiece? = canTapPieces.find { it.isAlive && it.position == Pair(col, row) }
+
                 //1.如果当前没有选择棋子
                 if(null == selectedPiece.value) {
                     //1.1.如果棋子是背面，则选中该棋子
@@ -329,39 +332,19 @@ class GameManager(
                 }
             }
         }
-
-//        tapScope.launch {
-//            //加锁，使每次事件引起的状态变化顺序进行
-//            tapMutex.withLock {
-//                //如果棋子被点击则切换其被选择状态
-//                val clickedPiece =
-//                    alivePieces.values.flatten()
-//                        .find { it.isAlive && it.position == Pair(col, row) }
-//
-//                //1.如果原来选中了棋子，而且不是再次点击的棋子，则直接取消选择棋子
-//                if (null != selectedPiece.value) {
-//                    //1.1.如果是原来的棋子，而且棋子是背面的，先翻面再取消选择（正面直接取消选择）
-//                    if (clickedPiece == selectedPiece.value && false == clickedPiece?.isFront) {
-//                        selectedPiece.value?.toFront()
-//                    }
-//                    selectedPiece.value?.deselect()
-//                    selectedPiece.value = null
-//                } else { //2.否则判断是否点中棋子，如果点中则选中，否则不操作
-//                    // 切换选中状态
-//                        clickedPiece?.select()
-//                        selectedPiece.value = clickedPiece
-//                }
-//            }
-//        }
-
-        //完成移动事件之后【不应该在这里】，如果移动到的位置已有象棋，应把该象棋标记为isOver
     }
 
     @SuppressLint("AssertionSideEffect")
     fun startGame() {
-        if (currentState.value == GameState.Ended) {
-            currentState.value = GameState.Running
-            println("Game started! Current state: ${currentState.value}")
+//        println("******************************[Stack Start]******************************")
+//        for (stackTrackElement: StackTraceElement in Thread.currentThread().getStackTrace()) {
+//            println("at " + stackTrackElement.getClassName() + "." + stackTrackElement.getMethodName() + "(" + stackTrackElement.getFileName() + ":" + stackTrackElement.getLineNumber() + ")")
+//        }
+//        println("******************************[Stack End]******************************")
+
+        if (currentState == GameState.Ended) {
+            currentState = GameState.Running
+            println("Game started! Current state: ${currentState}")
 
             //给当前布局和棋子数赋值
             piecesLayout = defaultLayout["十字交叉型"]!!
@@ -381,21 +364,12 @@ class GameManager(
     }
 
     fun endGame() {
-        if (currentState.value == GameState.Running) {
-            currentState.value = GameState.Ended
-            println("Game ended! Current state: ${currentState.value}")
+        if (currentState == GameState.Running) {
+            currentState = GameState.Ended
+            println("Game ended! Current state: ${currentState}")
         } else {
             println("Game is already ended.")
         }
     }
 }
 
-//fun main() {
-//    val gameManager = GameManager()
-//
-//    println(gameManager.getStatus()) // 初始状态
-//    gameManager.startGame()          // 启动游戏
-//    println(gameManager.getStatus()) // 游戏状态
-//    gameManager.endGame()            // 结束游戏
-//    println(gameManager.getStatus()) // 游戏状态
-//}

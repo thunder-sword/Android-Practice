@@ -51,20 +51,31 @@ fun ChessBoard(viewModel: GameViewModel) {
     //初始化游戏管理器
     val gameManager = remember { GameManager(tapScope) }
 
-    //启动游戏
-    gameManager.startGame()
+    // 确保游戏启动只在开始执行一次
+    LaunchedEffect(Unit) {
+        //启动游戏
+        gameManager.startGame()
+    }
 
-    //根据屏幕宽高获取棋盘宽高
-    val (chessBoardWidth, chessBoardHeight) =
-        gameManager.getBoardSize(LocalConfiguration.current.screenWidthDp.dp, LocalConfiguration.current.screenHeightDp.dp)
-
+    // 屏幕宽高
+    val configuration = LocalConfiguration.current
+    val screenWidth = configuration.screenWidthDp.dp
+    val screenHeight = configuration.screenHeightDp.dp
+    // 使用 derivedStateOf 和 remember，让其只有在屏幕大小发生变化时才更改棋盘宽高
+    val chessBoardSize by remember(screenWidth, screenHeight) {
+        derivedStateOf {
+            gameManager.getBoardSize(screenWidth, screenHeight)
+        }
+    }
+    // 解构棋盘宽高
+    val (chessBoardWidth, chessBoardHeight) = chessBoardSize
 
     // 用于控制弹窗是否显示
     var showDialog by remember { mutableStateOf(false) }
 
     // 监听 gameManager.currentState 的状态变化
     LaunchedEffect(gameManager.currentState) {
-        if (gameManager.currentState.value == GameState.Ended) {
+        if (gameManager.currentState == GameState.Ended) {
             showDialog = true
         }
     }
@@ -126,7 +137,7 @@ fun ChessBoard(viewModel: GameViewModel) {
         )
         Text(
             text = " ${gameManager.alivePieces.groupBy { it.camp }[PieceCamp.Black]?.size ?: 0}"
-                    + if(1==gameManager.currentPlayer) { "【轮到你了】" } else "",
+                    + if(1==gameManager.currentPlayer) { "【到你了】" } else "",
             color = Color.Blue,
             fontSize = 30.sp
         )
@@ -187,7 +198,7 @@ fun ChessBoard(viewModel: GameViewModel) {
         )
         Text(
             text = " ${gameManager.alivePieces.groupBy { it.camp }[PieceCamp.Red]?.size ?: 0}"
-                    + if(0==gameManager.currentPlayer) { "【轮到你了】" } else "",
+                    + if(0==gameManager.currentPlayer) { "【到你了】" } else "",
             color = Color.Red,
             fontSize = 30.sp
         )
