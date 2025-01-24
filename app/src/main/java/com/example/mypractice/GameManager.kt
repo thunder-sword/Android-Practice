@@ -22,6 +22,13 @@ enum class GameState {
     Ended
 }
 
+//联机状态枚举
+enum class OnlineState{
+    Local,
+    Server,
+    Client
+}
+
 //棋子坐标类，可规定是否只能存放某阵营棋子
 data class PieceLocation (
     val col: Int,
@@ -30,7 +37,8 @@ data class PieceLocation (
 )
 
 class GameManager(
-    private val tapScope: CoroutineScope    //在点击事件发生时发起协程，只有在Composable函数创建才能使用动画
+    private val tapScope: CoroutineScope,    //在点击事件发生时发起协程，只有在Composable函数创建才能使用动画
+    val onlineState: OnlineState = OnlineState.Local        //联机状态
 ) {
     //当前游戏状态
     var currentState by mutableStateOf(GameState.Ended)
@@ -40,10 +48,12 @@ class GameManager(
     var chessBoard: ChessBoard = ChessBoard()
         private set
 
-    //玩家序列，直接用阵营表示
+    // 玩家序列，直接用阵营表示
     val players: Array<PieceCamp> = PieceCamp.values()
-    //当前行动玩家
+    // 当前行动玩家
     var currentPlayer by mutableStateOf(0)
+    // 本地玩家下标（联机状态下时本机玩家的阵营下标）
+    var localPlayer by mutableStateOf(0)
 
     //当前游戏棋盘状态
     var currentBoard: Array<Array<MutableList<ChessPiece>>> = Array(chessBoard.cols) { Array(chessBoard.rows) { mutableListOf() } }
@@ -110,12 +120,12 @@ class GameManager(
     )
 
     // 当前被选中棋子
-    val selectedPiece = mutableStateOf<ChessPiece?>(null)
+    var selectedPiece by mutableStateOf<ChessPiece?>(null)
     // 点击事件锁
     private val tapMutex = Mutex()
     // 可到达位置序列
     val canToLocation: List<Pair<Int, Int>>
-        get() = if (true == selectedPiece.value?.isFront) { selectedPiece.value?.canToLocation(currentBoard) ?: listOf() } else { listOf() }
+        get() = if (true == selectedPiece?.isFront) { selectedPiece?.canToLocation(currentBoard) ?: listOf() } else { listOf() }
 
     // 返回放大棋盘后的宽高
     fun getBoardSize(screenWidth: Dp, screenHeight: Dp, percent: Float = 1f): Pair<Dp, Dp> {
@@ -333,6 +343,12 @@ class GameManager(
         val (col, row) = chessBoard.offsetToChessIndex(offset)
         println("点击了棋盘的坐标：列 $col, 行 $row")
 
+        //联机状态下，如果玩家不是自己，无法操作
+        if(OnlineState.Local != onlineState && currentPlayer != localPlayer){
+            println("等待远程玩家操作")
+            return
+        }
+
         tapScope.launch {
             //加锁，使每次事件引起的状态变化顺序进行
             tapMutex.withLock {
@@ -340,69 +356,106 @@ class GameManager(
                 val clickedPiece: ChessPiece? = canTapPieces.find { it.isAlive && it.position == Pair(col, row) }
 
                 //1.如果当前没有选择棋子
-                if(null == selectedPiece.value) {
+                if(null == selectedPiece) {
                     //1.1.如果棋子是背面，则选中该棋子
                     //1.2.如果选择是当前玩家阵营的棋子，则选中该棋子（自动管理可到达位置序列）
                     if(false == clickedPiece?.isFront || players[currentPlayer] == clickedPiece?.camp){
-                        selectedPiece.value=clickedPiece
-                        selectedPiece.value?.select()
+                        selectedPiece=clickedPiece
+                        selectedPiece?.select()
                     }
                 }
                 //2.如果当前选择了棋子
                 else {
                     //2.1.如果还是点击此棋子，并且棋子是反面，则翻面【翻面后切换玩家】
-                    if(false == clickedPiece?.isFront && clickedPiece == selectedPiece.value){
-                        selectedPiece.value?.toFront()
+                    if(false == clickedPiece?.isFront && clickedPiece == selectedPiece){
+                        selectedPiece?.toFront()
                         //取消选中棋子
-                        selectedPiece.value?.deselect()
-                        selectedPiece.value = null
+                        selectedPiece?.deselect()
+                        selectedPiece = null
                         currentPlayer = ( currentPlayer + 1) % players.size
                     }
                     //2.2.如果点击位置不在可到达坐标序列中则取消选中该棋子
                     else if(null == canToLocation.find{ it == Pair(col, row) }){
-                        selectedPiece.value?.deselect()
-                        selectedPiece.value = null
+                        selectedPiece?.deselect()
+                        selectedPiece = null
                     }
                     //2.3.如果点击位置在可到达坐标序列则跳到可到达坐标（将isOver标记为false，如果到达点有背面棋子则标记棋子isOver，如果吃了棋子则删除目标棋子，更新棋子坐标和currentBoard
                     //吃掉棋子之后要判断被吃掉的棋子阵营是否还有存活棋子，没有则结束游戏）【移动棋子后切换当前玩家】
                     else{
-                        //切换当前坐标
-                        selectedPiece.value?.isOver=false
-                        currentBoard[selectedPiece.value?.position!!.first][selectedPiece.value?.position!!.second].remove(selectedPiece.value)
-                        selectedPiece.value?.position=Pair(col, row)
-                        //处理目标节点
-                        //(1)如果目标没放棋子，直接放那即可
-                        if(0 == currentBoard[col][row].size){
-                            currentBoard[col][row].add(selectedPiece.value!!)
+                        //如果是联机状态，则发送移动指令给远程主机
+                        if(OnlineState.Local != onlineState){
+                            sendMessage(serializeMoveTo(col, row))
                         }
-                        //(2)如果有棋子则判断最上面那个棋子，棋子是否是反面，反面就放到它上面
-                        else if(!currentBoard[col][row].last().isFront){
-                            selectedPiece.value?.isOver=true
-                            currentBoard[col][row].add(selectedPiece.value!!)
-                        }
-                        //(3)正面就吃掉它，同样判断最上面的棋子
-                        else{
-                            //如果被吃掉的棋子在其他棋子上面，本棋子要继承此状态
-                            if(currentBoard[col][row].last().isOver){
-                                selectedPiece.value?.isOver = true
-                            }
-                            val ateCamp = currentBoard[col][row].last().camp
-                            currentBoard[col][row].last().isAlive=false     //棋子被吃掉了
-                            currentBoard[col][row].removeLast()
-                            currentBoard[col][row].add(selectedPiece.value!!)
-                            //如果对面棋子全部被吃完，游戏结束
-                            if(0 == (alivePieces.groupBy { it.camp }[ateCamp]?.size ?: 0)){
-                                endGame()
-                            }
-                        }
-                        //取消选中棋子
-                        selectedPiece.value?.deselect()
-                        selectedPiece.value = null
+                        movePieceTo(col=col,row=row)
                         currentPlayer = ( currentPlayer + 1) % players.size
                     }
                 }
             }
         }
+    }
+
+    //作用：移动指令序列化
+    fun serializeMoveTo(col: Int, row: Int): String{
+        return "(${selectedPiece?.position!!.first},${selectedPiece?.position!!.second})->(${col},${row})"
+    }
+
+    //作用：移动指令反序列化
+    fun deserializeMove(moveString: String): Pair<Pair<Int, Int>, Pair<Int, Int>> {
+        val parts = moveString.split("->")
+        if (parts.size != 2) {
+            throw IllegalArgumentException("Invalid move string format")
+        }
+
+        val from = parts[0].removeSurrounding("(", ")").split(",").map { it.toInt() }
+        val to = parts[1].removeSurrounding("(", ")").split(",").map { it.toInt() }
+
+        if (from.size != 2 || to.size != 2) {
+            throw IllegalArgumentException("Invalid coordinates in move string")
+        }
+
+        return Pair(Pair(from[0], from[1]), Pair(to[0], to[1]))
+    }
+
+
+    //作用：发送信息给远程主机
+    fun sendMessage(message: String){
+
+    }
+
+    //作用：将选中棋子移动到指定位置
+    suspend fun movePieceTo(col: Int, row: Int){
+        //切换当前坐标
+        selectedPiece?.isOver=false
+        currentBoard[selectedPiece?.position!!.first][selectedPiece?.position!!.second].remove(selectedPiece)
+        selectedPiece?.position=Pair(col, row)
+        //处理目标节点
+        //(1)如果目标没放棋子，直接放那即可
+        if(0 == currentBoard[col][row].size){
+            currentBoard[col][row].add(selectedPiece!!)
+        }
+        //(2)如果有棋子则判断最上面那个棋子，棋子是否是反面，反面就放到它上面
+        else if(!currentBoard[col][row].last().isFront){
+            selectedPiece?.isOver=true
+            currentBoard[col][row].add(selectedPiece!!)
+        }
+        //(3)正面就吃掉它，同样判断最上面的棋子
+        else{
+            //如果被吃掉的棋子在其他棋子上面，本棋子要继承此状态
+            if(currentBoard[col][row].last().isOver){
+                selectedPiece?.isOver = true
+            }
+            val ateCamp = currentBoard[col][row].last().camp
+            currentBoard[col][row].last().isAlive=false     //棋子被吃掉了
+            currentBoard[col][row].removeLast()
+            currentBoard[col][row].add(selectedPiece!!)
+            //如果对面棋子全部被吃完，游戏结束
+            if(0 == (alivePieces.groupBy { it.camp }[ateCamp]?.size ?: 0)){
+                endGame()
+            }
+        }
+        //取消选中棋子
+        selectedPiece?.deselect()
+        selectedPiece = null
     }
 
     @SuppressLint("AssertionSideEffect")
