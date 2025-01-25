@@ -17,12 +17,12 @@
             android:name=".DrawTest"
             android:exported="false" />
         <activity
-            android:name=".TCPConnecter"
+            android:name=".TCPConnecterActivity"
             android:exported="false"
             android:label="@string/title_activity_tcpconnecter"
             android:theme="@style/Theme.MyPractice" />
         <activity
-            android:name=".TCPListener"
+            android:name=".TCPListenerActivity"
             android:exported="false"
             android:label="@string/title_activity_tcplistener"
             android:theme="@style/Theme.MyPractice" />

@@ -38,7 +38,8 @@ data class PieceLocation (
 
 class GameManager(
     private val tapScope: CoroutineScope,    //在点击事件发生时发起协程，只有在Composable函数创建才能使用动画
-    val onlineState: OnlineState = OnlineState.Local        //联机状态
+    val onlineState: OnlineState = OnlineState.Local,        //联机状态
+    val tcpConnecter: TCPConnecter? = null      //所用tcp连接器
 ) {
     //当前游戏状态
     var currentState by mutableStateOf(GameState.Ended)

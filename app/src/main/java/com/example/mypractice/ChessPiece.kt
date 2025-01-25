@@ -1,12 +1,11 @@
 package com.example.mypractice
 
 import androidx.compose.animation.core.*
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
+import android.graphics.Matrix
+import android.graphics.Paint
 import kotlin.math.sqrt
 
 //棋子阵营枚举
@@ -87,8 +86,9 @@ class ChessPiece(
      * @param borderTop 棋盘的顶部空白部分长度
      * @param cellWidth 每个格子的宽度
      * @param cellHeight 每个格子的高度
+     * @param isRotate 是否要将图片旋转180度，默认不
      */
-    fun draw(drawScope: DrawScope, imageLoader: ImageLoader, borderLeft: Float, borderTop: Float, cellWidth: Float, cellHeight: Float) {
+    fun draw(drawScope: DrawScope, imageLoader: ImageLoader, borderLeft: Float, borderTop: Float, cellWidth: Float, cellHeight: Float, isRotate: Boolean=false) {
         //如果棋子已经死了，就不要再画了
         if(!isAlive){
             return
@@ -102,7 +102,7 @@ class ChessPiece(
         val (x, y) = position
         val centerX = borderLeft + cellWidth * x + shakingAnimation.value * shakingOffset
         var centerY = borderTop + cellHeight * y - selectedAnimation.value.second
-        val size = sqrt(cellWidth*cellWidth+cellHeight*cellHeight.toDouble()) *0.66 * selectedAnimation.value.first    //棋子的大小设定为0.66*格子的对角线长度
+        val size = (sqrt(cellWidth*cellWidth+cellHeight*cellHeight.toDouble()) *0.66 * selectedAnimation.value.first).toFloat()    //棋子的大小设定为0.66*格子的对角线长度
 
         drawScope.drawIntoCanvas { canvas ->
             val paint = Paint().apply {
@@ -110,21 +110,24 @@ class ChessPiece(
             }
             if(isOver) {        //如果棋子在其他棋子上面，则图像改为覆盖模式，并将中心点向下偏移一些
                 //paint.blendMode = BlendMode.SrcOver
-                centerY -= 15
+                centerY -= 18
             }
 
-            // 定义目标区域（图片最终绘制的位置和大小）
-            val dstOffset = IntOffset(
-                (centerX - size / 2).toInt(),
-                (centerY - size / 2).toInt()
-            )
-            val dstSize = IntSize(size.toInt(), size.toInt())
-            // 绘制图片
-            canvas.drawImageRect(
-                image = img,
-                dstOffset = dstOffset,
-                dstSize = dstSize,
-                paint = paint
+            // 创建 Matrix 对象用于变换
+            val matrix = Matrix()
+            // 1. 缩放
+            matrix.postScale(size/image.width, size/image.height)
+            if(isRotate) {
+                // 2. 旋转（以缩放后的中心为轴）
+                matrix.postRotate(180f, size / 2, size / 2)
+            }
+            // 3. 平移（将图片移动到指定位置）
+            matrix.postTranslate(centerX - size / 2, centerY - size / 2)
+
+            canvas.nativeCanvas.drawBitmap(
+                img.asAndroidBitmap(),
+                matrix,
+                paint
             )
         }
     }

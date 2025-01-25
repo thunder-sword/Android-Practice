@@ -45,11 +45,11 @@ class DrawTest : ComponentActivity() {
 
 //画棋盘
 @Composable
-fun ChessBoard(viewModel: GameViewModel) {
+fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.Local, tcpConnecter: TCPConnecter? = null) {
     //点击协程实例
     val tapScope = rememberCoroutineScope()
     //初始化游戏管理器
-    val gameManager = remember { GameManager(tapScope) }
+    val gameManager = remember { GameManager(tapScope, onlineState=onlineState, tcpConnecter=tcpConnecter) }
 
     // 确保游戏启动只在开始执行一次
     LaunchedEffect(Unit) {
@@ -165,13 +165,16 @@ fun ChessBoard(viewModel: GameViewModel) {
 
             // 绘制棋子图片
             for (piece in gameManager.alivePieces) {
+                //黑子的正面棋子需要旋转180度
+                val isRotate: Boolean = (piece.isFront && PieceCamp.Black == piece.camp)
                 piece.draw(
                     this,
                     imageLoader = viewModel.imageLoader,
                     borderLeft = gameManager.chessBoard.borderLeft,
                     borderTop = gameManager.chessBoard.borderTop,
                     cellWidth = gameManager.chessBoard.cellWidth,
-                    cellHeight = gameManager.chessBoard.cellHeight
+                    cellHeight = gameManager.chessBoard.cellHeight,
+                    isRotate = isRotate
                 )
             }
 

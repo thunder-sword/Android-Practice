@@ -21,7 +21,7 @@ import kotlinx.coroutines.*
 import java.io.*
 import java.net.*
 
-class TCPListener : ComponentActivity() {
+class TCPListenerActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
