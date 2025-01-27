@@ -1,6 +1,7 @@
 package com.example.mypractice
 
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
@@ -14,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,6 +48,7 @@ class DrawTest : ComponentActivity() {
 //画棋盘
 @Composable
 fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.Local, tcpConnecter: TCPConnecter? = null) {
+    val current = LocalContext.current
     //点击协程实例
     val tapScope = rememberCoroutineScope()
     //初始化游戏管理器
@@ -70,27 +73,30 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
     // 解构棋盘宽高
     val (chessBoardWidth, chessBoardHeight) = chessBoardSize
 
-    // 用于控制弹窗是否显示
-    var showDialog by remember { mutableStateOf(false) }
+    // 重新开始游戏弹窗是否显示
+    var restartDialog by remember { mutableStateOf(false) }
+    // 是否悔棋游戏弹窗是否显示
+    var backDialog by remember { mutableStateOf(false) }
 
     // 监听 gameManager.currentState 的状态变化
     LaunchedEffect(gameManager.currentState) {
         if (gameManager.currentState == GameState.Ended) {
-            showDialog = true
+            restartDialog = true
         }
     }
 
-    // 显示弹窗
-    if (showDialog) {
+    // 显示重新开始弹窗
+    if (restartDialog) {
         AlertDialog(
             onDismissRequest = { /* 不允许点击外部关闭弹窗 */ },
-            title = { Text(text = "游戏结束") },
+            title = { Text(text = "确定") },
             text = { Text(text = "是否要重新开始游戏？") },
             confirmButton = {
                 Button(onClick = {
-                    // 重置游戏状态
+                    //重启游戏
+                    gameManager.endGame()
                     gameManager.startGame()
-                    showDialog = false
+                    restartDialog = false
                 }) {
                     Text("重新开始")
                 }
@@ -98,7 +104,7 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
             dismissButton = {
                 Button(onClick = {
                     // 关闭弹窗
-                    showDialog = false
+                    restartDialog = false
                 }) {
                     Text("退出")
                 }
@@ -106,15 +112,39 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
         )
     }
 
+    // 显示悔棋确定弹窗
+    if (backDialog) {
+        AlertDialog(
+            onDismissRequest = { /* 不允许点击外部关闭弹窗 */ },
+            title = { Text(text = "确定") },
+            text = { Text(text = "是否真的要悔棋？") },
+            confirmButton = {
+                Button(onClick = {
+                    if (!gameManager.backStep()){
+                        Toast.makeText(current, "不能再悔棋了", Toast.LENGTH_LONG).show()
+                    }
+                    backDialog = false
+                }) {
+                    Text("确定")
+                }
+            },
+            dismissButton = {
+                Button(onClick = {
+                    // 关闭弹窗
+                    backDialog = false
+                }) {
+                    Text("退出")
+                }
+            }
+        )
+    }
 
     Box(
         contentAlignment = Alignment.TopStart
     ){
         Button(
             onClick = {
-                //重启游戏
-                gameManager.endGame()
-                gameManager.startGame()
+                restartDialog = true
             }
         ){
             Text(text = "重新开始")
@@ -205,6 +235,18 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
             color = Color.Red,
             fontSize = 30.sp
         )
+    }
+
+    Box(
+        contentAlignment = Alignment.BottomEnd
+    ){
+        Button(
+            onClick = {
+                backDialog = true
+            }
+        ){
+            Text(text = "悔棋")
+        }
     }
 }
 

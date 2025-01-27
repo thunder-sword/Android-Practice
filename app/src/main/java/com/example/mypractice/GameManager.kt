@@ -36,6 +36,21 @@ data class PieceLocation (
     val camp: PieceCamp? = null
 )
 
+//操作类，标识一次操作的基本信息
+data class Operation (
+    val camp: PieceCamp,  //哪个阵营操作的
+    val piece: ChessPiece,  //操作的棋子是什么
+    val srcLocation: Pair<Int, Int>,  //操作的棋子原本在哪
+    val dstLocation: Pair<Int, Int>,   //棋子所到的目的地址（如果等于原位置说明是翻面）
+)
+
+//死亡棋子记录类
+data class DeadPiece(
+    val index: Int,
+    val piece: ChessPiece,
+    val location: Pair<Int, Int>
+)
+
 class GameManager(
     private val tapScope: CoroutineScope,    //在点击事件发生时发起协程，只有在Composable函数创建才能使用动画
     val onlineState: OnlineState = OnlineState.Local,        //联机状态
@@ -69,6 +84,12 @@ class GameManager(
     val canTapPieces: List<ChessPiece>
         get() = currentBoard.flatten()  //展平棋盘
             .mapNotNull { it.lastOrNull() }       //只取最后一个棋子
+
+    //存储自游戏开始以来的所有操作步数，用于悔棋操作
+    var operations: MutableList<Operation> = mutableListOf()
+    //存储已死掉的所有棋子，并记录它死掉时的操作下标和位置
+    var deadPieces: MutableList<DeadPiece> = mutableListOf()
+
 
     // 所有棋子的坐标
     var piecesLayout: List<PieceLocation> = listOf()
@@ -183,6 +204,9 @@ class GameManager(
     fun generateInitialBoard(){
         //每次生成随机棋局都将当前棋局初始化
         currentBoard = Array(chessBoard.cols) { Array(chessBoard.rows) { mutableListOf() } }
+        operations = mutableListOf()
+        deadPieces = mutableListOf()
+
         //现将布局和棋子根据阵营分类
         val campLayout = piecesLayout.groupBy { it.camp }
         val campType = piecesType
@@ -344,6 +368,12 @@ class GameManager(
         val (col, row) = chessBoard.offsetToChessIndex(offset)
         println("点击了棋盘的坐标：列 $col, 行 $row")
 
+        //如果当前处于加锁状态则取消操作
+        if(tapMutex.isLocked){
+            println("等待其他操作完成")
+            return
+        }
+
         //联机状态下，如果玩家不是自己，无法操作
         if(OnlineState.Local != onlineState && currentPlayer != localPlayer){
             println("等待远程玩家操作")
@@ -370,6 +400,8 @@ class GameManager(
                     //2.1.如果还是点击此棋子，并且棋子是反面，则翻面【翻面后切换玩家】
                     if(false == clickedPiece?.isFront && clickedPiece == selectedPiece){
                         selectedPiece?.toFront()
+                        //将翻面操作记录
+                        operations.add(Operation(players[currentPlayer], selectedPiece!!, Pair(col, row), Pair(col, row)))
                         //取消选中棋子
                         selectedPiece?.deselect()
                         selectedPiece = null
@@ -387,6 +419,8 @@ class GameManager(
                         if(OnlineState.Local != onlineState){
                             sendMessage(serializeMoveTo(col, row))
                         }
+                        //记录当前移动操作
+                        operations.add(Operation(players[currentPlayer], selectedPiece!!, selectedPiece!!.position, Pair(col, row)))
                         movePieceTo(col=col,row=row)
                         currentPlayer = ( currentPlayer + 1) % players.size
                     }
@@ -423,6 +457,52 @@ class GameManager(
 
     }
 
+    //作用：悔棋一次，回复上次操作布局
+    fun backStep(): Boolean{
+        if(0==operations.size){
+            return false
+        }
+        //悔棋过程由子进程加锁完成
+        tapScope.launch {
+            tapMutex.withLock {
+                //恢复操作序列
+                val index = operations.size - 1
+                val operation = operations.last()
+                operations.removeAt(index)
+                //恢复指定操作前的棋局
+                //1.如果是翻面则翻回去
+                if (operation.srcLocation == operation.dstLocation) {
+                    operation.piece.isFront = false
+                }
+                //2.否则则将棋子移回去
+                selectedPiece = operation.piece
+                currentPlayer = players.indexOf(operation.camp)  //当时是谁操作的，还让谁操作
+                movePieceTo(
+                    operation.srcLocation.first,
+                    operation.srcLocation.second
+                )  //默认当前的棋子坐标就是dstLocation，也就是只能顺序悔棋
+                //最后不需要切换玩家
+                //3.如果当前操作吃掉了棋子，则将那个棋子复活到原位置
+                var restorePiece: DeadPiece? = null
+                for (deadPiece in deadPieces) {
+                    if (deadPiece.index == index) { //判断棋子是不是在本部死的
+                        restorePiece = deadPiece
+                        break
+                    }
+                }
+                if(null!=restorePiece){
+                    restorePiece.piece.isAlive = true
+                    currentBoard[restorePiece.location.first][restorePiece.location.second].add(
+                        restorePiece.piece
+                    )
+                    //将它从死亡列表中移除
+                    deadPieces.remove(restorePiece)
+                }
+            }
+        }
+        return true
+    }
+
     //作用：将选中棋子移动到指定位置
     suspend fun movePieceTo(col: Int, row: Int){
         //切换当前坐标
@@ -445,12 +525,16 @@ class GameManager(
             if(currentBoard[col][row].last().isOver){
                 selectedPiece?.isOver = true
             }
-            val ateCamp = currentBoard[col][row].last().camp
+            val atePiece = currentBoard[col][row].last()
+            //记录被吃掉的棋子
+            deadPieces.add(DeadPiece(operations.size-1, atePiece, atePiece.position))
+            //吃掉棋子
             currentBoard[col][row].last().isAlive=false     //棋子被吃掉了
+            deadPieces.add(DeadPiece(operations.size, currentBoard[col][row].last(), Pair(col, row)))
             currentBoard[col][row].removeLast()
             currentBoard[col][row].add(selectedPiece!!)
             //如果对面棋子全部被吃完，游戏结束
-            if(0 == (alivePieces.groupBy { it.camp }[ateCamp]?.size ?: 0)){
+            if(0 == (alivePieces.groupBy { it.camp }[atePiece.camp]?.size ?: 0)){
                 endGame()
             }
         }
