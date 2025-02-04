@@ -7,6 +7,10 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,6 +23,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.ViewModelProvider
 import com.example.mypractice.ui.theme.MyPracticeTheme
 
@@ -50,9 +56,16 @@ class DrawTest : ComponentActivity() {
 fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.Local, tcpConnecter: TCPConnecter? = null) {
     val current = LocalContext.current
     //点击协程实例
-    val tapScope = rememberCoroutineScope()
+    val scope = rememberCoroutineScope()
     //初始化游戏管理器
-    val gameManager = remember { GameManager(tapScope, onlineState=onlineState, tcpConnecter=tcpConnecter) }
+    val gameManager = remember {
+        GameManager(
+            current = current,
+            scope = scope,
+            onlineState = onlineState,
+            tcpConnecter = tcpConnecter
+        )
+    }
 
     // 确保游戏启动只在开始执行一次
     LaunchedEffect(Unit) {
@@ -85,6 +98,62 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
         }
     }
 
+    //如果有blockQuery信息则显示
+    if (!gameManager.blockQueryString.isEmpty()) {
+        AlertDialog(
+            onDismissRequest = { /* 不允许点击外部关闭弹窗 */ },
+            title = { Text(text = "对方请求") },
+            text = { Text(text = gameManager.blockQueryString) },
+            confirmButton = {
+                Button(onClick = {
+                    restartDialog = false
+                    gameManager.onBlockQueryYes?.invoke()
+                }) {
+                    Text("是")
+                }
+            },
+            dismissButton = {
+                Button(onClick = {
+                    // 关闭弹窗
+                    restartDialog = false
+                    gameManager.onBlockQueryNo?.invoke()
+                }) {
+                    Text("否")
+                }
+            }
+        )
+    }
+
+    //如果有block信息则显示
+    if (!gameManager.blockString.isEmpty()) {
+        Dialog(
+            onDismissRequest = { /* 不允许点击外部关闭弹窗 */ },
+            properties = DialogProperties(
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false
+            )
+        ) {
+            // 居中显示的加载提示框
+            Surface(
+                modifier = Modifier
+                    .width(200.dp)
+                    .height(150.dp),
+                shape = RoundedCornerShape(8.dp),
+                color = Color.White
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    CircularProgressIndicator(color = Color.Black) // 加载指示器
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(gameManager.blockString, color = Color.Black)
+                }
+            }
+        }
+    }
+
     // 显示重新开始弹窗
     if (restartDialog) {
         AlertDialog(
@@ -93,9 +162,7 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
             text = { Text(text = "是否要重新开始游戏？") },
             confirmButton = {
                 Button(onClick = {
-                    //重启游戏
-                    gameManager.endGame()
-                    gameManager.startGame()
+                    gameManager.tryRestartGame()
                     restartDialog = false
                 }) {
                     Text("重新开始")
@@ -106,7 +173,7 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
                     // 关闭弹窗
                     restartDialog = false
                 }) {
-                    Text("退出")
+                    Text("取消")
                 }
             }
         )
@@ -120,7 +187,7 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
             text = { Text(text = "是否真的要悔棋？") },
             confirmButton = {
                 Button(onClick = {
-                    if (!gameManager.backStep()){
+                    if (!gameManager.tryBackStep()) {
                         Toast.makeText(current, "不能再悔棋了", Toast.LENGTH_LONG).show()
                     }
                     backDialog = false
@@ -133,7 +200,7 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
                     // 关闭弹窗
                     backDialog = false
                 }) {
-                    Text("退出")
+                    Text("取消")
                 }
             }
         )
@@ -141,100 +208,142 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
 
     Box(
         contentAlignment = Alignment.TopStart
-    ){
+    ) {
         Button(
             onClick = {
                 restartDialog = true
             }
-        ){
+        ) {
             Text(text = "重新开始")
         }
     }
 
-    Row(
-        modifier = Modifier
-            .graphicsLayer {
-                scaleX = -1f
-                scaleY = -1f
-                           }, // 垂直对角翻转180度
-        verticalAlignment = Alignment.Bottom,
-        horizontalArrangement = Arrangement.Start
-    ){
-        Text(
-            "玩家2",
-            color = Color.Blue,
-            fontSize = 40.sp
-        )
-        Text(
-            text = " ${gameManager.alivePieces.groupBy { it.camp }[PieceCamp.Black]?.size ?: 0}"
-                    + if(1==gameManager.currentPlayer) { "【到你了】" } else "",
-            color = Color.Blue,
-            fontSize = 30.sp
-        )
+    val boxModifier = Modifier
+        .fillMaxWidth()
+
+    if(0!=gameManager.localPlayer){
+        boxModifier.graphicsLayer {
+            scaleX = -1f
+            scaleY = -1f
+        } // 垂直对角翻转180度
     }
 
-    // Box用于居中棋盘
     Box(
-        modifier = Modifier
-            .fillMaxSize(),
-        contentAlignment = Alignment.Center
+        modifier = boxModifier
     ) {
-        // 绘制棋盘
-        Canvas(
-            modifier = Modifier
-                .size(width = chessBoardWidth, height = chessBoardHeight)
-                .pointerInput(Unit) {
-                    detectTapGestures { offset ->
-                        gameManager.handleTap(offset)
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.Top, // 垂直方向上靠上对齐
+            horizontalAlignment = Alignment.CenterHorizontally // 水平方向上居中对齐
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer {
+                        scaleX = -1f
+                        scaleY = -1f
+                    }, // 垂直对角翻转180度
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.Start
+            ) {
+                Text(
+                    "玩家2",
+                    color = Color.Blue,
+                    fontSize = 40.sp
+                )
+                Text(
+                    text = " ${gameManager.alivePieces.groupBy { it.camp }[PieceCamp.Black]?.size ?: 0}"
+                            + if (1 == gameManager.currentPlayer) {
+                        "【到你了】"
+                    } else "",
+                    color = Color.Blue,
+                    fontSize = 30.sp
+                )
+            }
+
+            if (OnlineState.Local != onlineState) {
+                //让文本框支持向下滚动
+                val scrollState1 = rememberScrollState()
+                Box(
+                    Modifier
+                        .verticalScroll(scrollState1)
+                        .padding(8.dp),
+                    Alignment.Center
+                ) {
+                    SelectionContainer {
+                        Text(tcpConnecter!!.connectionStatus, Modifier.padding(8.dp))
                     }
                 }
-        ) {
-            //绘制棋盘
-            gameManager.chessBoard.initialize(size)
-            gameManager.chessBoard.draw(this, imageLoader = viewModel.imageLoader)
+            }
+        }
 
-            // 绘制棋子图片
-            for (piece in gameManager.alivePieces) {
-                //黑子的正面棋子需要旋转180度
-                val isRotate: Boolean = (piece.isFront && PieceCamp.Black == piece.camp)
-                piece.draw(
+        // Box用于居中棋盘
+        Box(
+            modifier = Modifier
+                .fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            // 绘制棋盘
+            Canvas(
+                modifier = Modifier
+                    .size(width = chessBoardWidth, height = chessBoardHeight)
+                    .pointerInput(Unit) {
+                        detectTapGestures { offset ->
+                            gameManager.handleTap(offset)
+                        }
+                    }
+            ) {
+                //绘制棋盘
+                gameManager.chessBoard.initialize(size)
+                gameManager.chessBoard.draw(this, imageLoader = viewModel.imageLoader)
+
+                // 绘制棋子图片
+                for (piece in gameManager.alivePieces) {
+                    //黑子的正面棋子需要旋转180度
+                    val isRotate: Boolean = (piece.isFront && PieceCamp.Black == piece.camp)
+                    piece.draw(
+                        this,
+                        imageLoader = viewModel.imageLoader,
+                        borderLeft = gameManager.chessBoard.borderLeft,
+                        borderTop = gameManager.chessBoard.borderTop,
+                        cellWidth = gameManager.chessBoard.cellWidth,
+                        cellHeight = gameManager.chessBoard.cellHeight,
+                        isRotate = isRotate
+                    )
+                }
+
+                // 绘制可到达位置提示格
+                gameManager.drawBox(
                     this,
                     imageLoader = viewModel.imageLoader,
                     borderLeft = gameManager.chessBoard.borderLeft,
                     borderTop = gameManager.chessBoard.borderTop,
                     cellWidth = gameManager.chessBoard.cellWidth,
-                    cellHeight = gameManager.chessBoard.cellHeight,
-                    isRotate = isRotate
+                    cellHeight = gameManager.chessBoard.cellHeight
                 )
             }
+        }
 
-            // 绘制可到达位置提示格
-            gameManager.drawBox(
-                this,
-                imageLoader = viewModel.imageLoader,
-                borderLeft = gameManager.chessBoard.borderLeft,
-                borderTop = gameManager.chessBoard.borderTop,
-                cellWidth = gameManager.chessBoard.cellWidth,
-                cellHeight = gameManager.chessBoard.cellHeight
+        Row(
+            modifier = Modifier
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.Start
+        ) {
+            Text(
+                "玩家1",
+                color = Color.Red,
+                fontSize = 40.sp,
+            )
+            Text(
+                text = " ${gameManager.alivePieces.groupBy { it.camp }[PieceCamp.Red]?.size ?: 0}"
+                        + if (0 == gameManager.currentPlayer) {
+                    "【到你了】"
+                } else "",
+                color = Color.Red,
+                fontSize = 30.sp
             )
         }
-    }
-
-    Row(
-        verticalAlignment = Alignment.Bottom,
-        horizontalArrangement = Arrangement.Start
-    ){
-        Text(
-            "玩家1",
-            color = Color.Red,
-            fontSize = 40.sp,
-        )
-        Text(
-            text = " ${gameManager.alivePieces.groupBy { it.camp }[PieceCamp.Red]?.size ?: 0}"
-                    + if(0==gameManager.currentPlayer) { "【到你了】" } else "",
-            color = Color.Red,
-            fontSize = 30.sp
-        )
     }
 
     Box(

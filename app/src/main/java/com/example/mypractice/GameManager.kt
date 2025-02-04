@@ -1,6 +1,8 @@
 package com.example.mypractice
 
 import android.annotation.SuppressLint
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.runtime.*
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
@@ -10,8 +12,7 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.math.sqrt
@@ -52,13 +53,23 @@ data class DeadPiece(
 )
 
 class GameManager(
-    private val tapScope: CoroutineScope,    //在点击事件发生时发起协程，只有在Composable函数创建才能使用动画
+    val current: Context,
+    private val scope: CoroutineScope,    //在点击事件发生时发起协程，只有在Composable函数创建才能使用动画
+
     val onlineState: OnlineState = OnlineState.Local,        //联机状态
     val tcpConnecter: TCPConnecter? = null      //所用tcp连接器
 ) {
     //当前游戏状态
     var currentState by mutableStateOf(GameState.Ended)
         private set
+
+    //block提示信息
+    var blockString by mutableStateOf("")
+
+    //block请求信息
+    var blockQueryString by mutableStateOf("")
+    var onBlockQueryYes: (() -> Unit)? = null
+    var onBlockQueryNo: (() -> Unit)? = null
 
     //棋盘实例
     var chessBoard: ChessBoard = ChessBoard()
@@ -146,7 +157,7 @@ class GameManager(
     // 点击事件锁
     private val tapMutex = Mutex()
     // 可到达位置序列
-    val canToLocation: List<Pair<Int, Int>>
+    private val canToLocation: List<Pair<Int, Int>>
         get() = if (true == selectedPiece?.isFront) { selectedPiece?.canToLocation(currentBoard) ?: listOf() } else { listOf() }
 
     // 返回放大棋盘后的宽高
@@ -371,16 +382,18 @@ class GameManager(
         //如果当前处于加锁状态则取消操作
         if(tapMutex.isLocked){
             println("等待其他操作完成")
+            //Toast.makeText(current, "等待其他操作完成", Toast.LENGTH_SHORT).show()
             return
         }
 
         //联机状态下，如果玩家不是自己，无法操作
         if(OnlineState.Local != onlineState && currentPlayer != localPlayer){
             println("等待远程玩家操作")
+            Toast.makeText(current, "等待远程玩家操作", Toast.LENGTH_SHORT).show()
             return
         }
 
-        tapScope.launch {
+        scope.launch {
             //加锁，使每次事件引起的状态变化顺序进行
             tapMutex.withLock {
                 //只取每一叠象棋最上面那个棋子进行判断（这个不加锁就会导致点不到的棋子被点到）
@@ -400,7 +413,11 @@ class GameManager(
                     //2.1.如果还是点击此棋子，并且棋子是反面，则翻面【翻面后切换玩家】
                     if(false == clickedPiece?.isFront && clickedPiece == selectedPiece){
                         selectedPiece?.toFront()
-                        //将翻面操作记录
+                        //如果是联机状态，则发送移动指令给远程主机
+                        if(OnlineState.Local != onlineState){
+                            sendMessage("moveChess: ${serializeMoveTo(col, row)}")
+                        }
+                        //记录翻面操作
                         operations.add(Operation(players[currentPlayer], selectedPiece!!, Pair(col, row), Pair(col, row)))
                         //取消选中棋子
                         selectedPiece?.deselect()
@@ -451,19 +468,136 @@ class GameManager(
         return Pair(Pair(from[0], from[1]), Pair(to[0], to[1]))
     }
 
-
     //作用：发送信息给远程主机
     fun sendMessage(message: String){
+        tcpConnecter!!.messageToSend = message
+        tcpConnecter!!.send(current)
+    }
 
+    //作用：处理接收来的指令
+    fun handleInst(message: String){
+        val (inst, value) = message.split(": ")
+        when(inst){
+            //如果是移动指令，并且当前并非自己操作，则移动棋子并切换玩家
+            "moveChess" -> {
+                if(currentPlayer != localPlayer){
+                    val (srcLocation, dstLocation) = deserializeMove(value)
+
+                    scope.launch {
+                        //加锁，使每次事件引起的状态变化顺序进行
+                        tapMutex.withLock {
+                            //只取每一叠象棋最上面那个棋子进行判断（这个不加锁就会导致点不到的棋子被点到）
+                            selectedPiece = canTapPieces.find { it.isAlive && it.position == srcLocation }
+                            //发送过来的位置一定有棋子
+                            selectedPiece?.select()
+                            //记录当前移动操作
+                            operations.add(Operation(players[currentPlayer], selectedPiece!!, selectedPiece!!.position, dstLocation))
+                            //如果起始位置和目标位置一样则翻面，不一样则移动
+                            if(srcLocation == dstLocation){
+                                selectedPiece?.toFront()
+                            }else {
+                                movePieceTo(col = dstLocation.first, row = dstLocation.second)
+                            }
+                            selectedPiece?.deselect()
+                            selectedPiece = null
+                            currentPlayer = (currentPlayer + 1) % players.size
+                        }
+                    }
+                }
+            }
+            //如果是重新开始请求，则在当前页面显示
+            //如果对面同意重新开始，则重启游戏并提示
+            "isRestart" -> {
+                when (value) {
+                    "query" -> {
+                        blockQueryString = "对方请求重新开始游戏"
+                        onBlockQueryYes = {
+                            tryRestartGame(true)
+                            sendMessage("isRestart: yes")
+                            blockQueryString = ""
+                        }
+                        onBlockQueryNo = {
+                            Toast.makeText(current, "已拒绝重新开始", Toast.LENGTH_SHORT).show()
+                            sendMessage("isRestart: no")
+                            blockQueryString = ""
+                        }
+                    }
+                    "yes" -> {
+                        blockString = ""
+                        tryRestartGame(true)
+                    }
+                    "no" -> {
+                        blockString = ""
+                        scope.launch {
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(current, "对方拒绝重新开始", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                }
+            }
+            //如果是悔棋请求则和重新开始请求类似
+            "isBackStep" -> {
+                when (value) {
+                    "query" -> {
+                        blockQueryString = "对方请求悔棋"
+                        onBlockQueryYes = {
+                            tryBackStep(true)
+                            sendMessage("isBackStep: yes")
+                            blockQueryString = ""
+                        }
+                        onBlockQueryNo = {
+                            Toast.makeText(current, "已拒绝悔棋", Toast.LENGTH_SHORT).show()
+                            sendMessage("isBackStep: no")
+                            blockQueryString = ""
+                        }
+                    }
+                    "yes" -> {
+                        blockString = ""
+                        tryBackStep(true)
+                    }
+                    "no" -> {
+                        blockString = ""
+                        scope.launch {
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(current, "对方拒绝悔棋", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                }
+            }
+            //如果是客户端，并且收到了棋局就更新棋局
+            "chessBoard" -> {
+                if(OnlineState.Client == onlineState){
+                    currentBoard = deserializeChessBoard(value)
+                }
+            }
+            //如果是客户端，并且收到了当前玩家就更新当前玩家
+            "currentPlayer" -> {
+                if(OnlineState.Client == onlineState)
+                    currentPlayer = value.toInt()
+            }
+            else -> {
+                //未知指令，将忽略
+                println("未知的指令：${message}")
+            }
+        }
     }
 
     //作用：悔棋一次，回复上次操作布局
-    fun backStep(): Boolean{
+    fun tryBackStep(ok: Boolean=false): Boolean{
         if(0==operations.size){
             return false
         }
+        //如果不是本地游戏，则请求对方
+        if(!ok && OnlineState.Local != onlineState){
+            //否则先发送请求给对方，再禁止用户操作
+            sendMessage("isBackStep: query")
+            blockString = "正在询问对方..."
+            return true
+        }
         //悔棋过程由子进程加锁完成
-        tapScope.launch {
+        scope.launch {
             tapMutex.withLock {
                 //恢复操作序列
                 val index = operations.size - 1
@@ -476,7 +610,7 @@ class GameManager(
                 }
                 //2.否则则将棋子移回去
                 selectedPiece = operation.piece
-                currentPlayer = players.indexOf(operation.camp)  //当时是谁操作的，还让谁操作
+                currentPlayer = players.indexOf(operation.camp)  //当时是谁操作的，还让谁操作，最后不用换玩家
                 movePieceTo(
                     operation.srcLocation.first,
                     operation.srcLocation.second
@@ -554,17 +688,33 @@ class GameManager(
             currentState = GameState.Running
             println("Game started! Current state: ${currentState}")
 
-            //给当前布局和棋子数赋值
-            piecesLayout = defaultLayout["十字交叉型"]!!
-            piecesType = defaultType["等量经典棋数"]!!
-            //检查布局和棋子数是否适合
-            assert(checkMatch())
-
-            //如果合适则自动生成随机棋局
-            generateInitialBoard()
-
             //随机选择先手玩家
             currentPlayer = (0..players.size - 1).random()
+
+            println("chessBoard: ${serializeChessBoard(currentBoard)}")
+            println("currentPlayer: ${currentPlayer}")
+
+            //如果不是本地游戏需要操作
+            if (OnlineState.Local != onlineState){
+                //将接收信息回调函数传入，函数引用
+                tcpConnecter!!.onMessageReceived = ::handleInst
+            }
+            //如果是服务器
+            if (OnlineState.Server == onlineState){
+                //给当前布局和棋子数赋值
+                piecesLayout = defaultLayout["十字交叉型"]!!
+                piecesType = defaultType["等量经典棋数"]!!
+                //检查布局和棋子数是否适合
+                assert(checkMatch())
+
+                //如果合适则自动生成随机棋局
+                generateInitialBoard()
+
+                //发送棋局
+                sendMessage("chessBoard: ${serializeChessBoard(currentBoard)}")
+                //发送先手玩家
+                sendMessage("currentPlayer: ${currentPlayer}")
+            }
         } else {
             println("Game is already running.")
             return
@@ -577,6 +727,26 @@ class GameManager(
             println("Game ended! Current state: ${currentState}")
         } else {
             println("Game is already ended.")
+        }
+    }
+
+    //作用：尝试重启游戏
+    fun tryRestartGame(ok: Boolean = false){
+        //如果是本地游戏直接重启游戏，否则请求对方
+        if(ok || OnlineState.Local == onlineState) {
+            //重启游戏
+            endGame()
+            startGame()
+            //通过协程切换到主线程显示toast
+            scope.launch {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(current, "已重新开始游戏", Toast.LENGTH_LONG).show()
+                }
+            }
+        }else{
+            //否则先发送请求给对方，再禁止用户操作
+            sendMessage("isRestart: query")
+            blockString = "正在询问对方..."
         }
     }
 }

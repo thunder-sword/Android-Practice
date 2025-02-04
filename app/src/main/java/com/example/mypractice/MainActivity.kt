@@ -53,7 +53,7 @@ fun MainScreen(startUp: (Int) -> Unit) {
                     startUp(1)
                 }
             ) {
-                Text("Listen")
+                Text("创建房间")
             }
 
             Button(
@@ -61,7 +61,7 @@ fun MainScreen(startUp: (Int) -> Unit) {
                     startUp(2)
                 }
             ) {
-                Text("Connect")
+                Text("连接服务器")
             }
 
             Button(
@@ -69,7 +69,7 @@ fun MainScreen(startUp: (Int) -> Unit) {
                     startUp(3)
                 }
             ) {
-                Text("Draw")
+                Text("本地双人游玩")
             }
         }
     }

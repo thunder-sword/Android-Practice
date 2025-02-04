@@ -56,24 +56,26 @@ class TCPConnecterActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colors.background
                 ) {
-                    MainScreen(viewModel)
+                    ConnecterMainScreen(viewModel)
                 }
             }
         }
     }
 }
 
-class TCPConnecter{
+open class TCPConnecter{
     internal var socket: Socket? = null
     internal var writer: PrintWriter? = null
     internal var reader: BufferedReader? = null
     var isConnect by mutableStateOf(false)
-    var ip by mutableStateOf("")
-    var port by mutableStateOf("")
+    var ip by mutableStateOf("192.168.150.66")
+    var port by mutableStateOf("8888")
     var connectionStatus by mutableStateOf("Not Connected")
     var messageToSend by mutableStateOf("")
     var receivedMessages by mutableStateOf("")
     var message by mutableStateOf("")
+
+    var onMessageReceived: ((String) -> Unit)? = null
 
     //作用：发送消息
     fun send(current: Context){
@@ -105,16 +107,56 @@ class TCPConnecter{
         }
     }
 
-    //作用：连接
-    fun connect(){
-        val portNumber = port.toIntOrNull()!!
-        socket = Socket(ip, portNumber)
-        writer = PrintWriter(socket!!.getOutputStream(), true)
-        reader = BufferedReader(InputStreamReader(socket!!.getInputStream()))
+    //作用：实际连接函数
+    private fun _connect(): Boolean{
+        try {
+            val portNumber = port.toIntOrNull()!!
+            socket = Socket(ip, portNumber)
+            writer = PrintWriter(socket!!.getOutputStream(), true)
+            reader = BufferedReader(InputStreamReader(socket!!.getInputStream()))
+        } catch (e: Exception) {
+            return false
+        }
+        return true
+    }
+
+    //作用：连接函数
+    open fun connect(): Boolean {
+        val portNumber = port.toIntOrNull()
+        if (ip.isBlank() || portNumber == null) {
+            //Toast.makeText(current, "Invalid IP or Port", Toast.LENGTH_SHORT).show()
+            return false
+        }
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                //标记为已连接
+                isConnect = _connect()
+                if(!isConnect){
+                    return@launch
+                }
+
+                withContext(Dispatchers.Main) {
+                    connectionStatus = "Connected to ${ip}:$portNumber"
+                }
+
+                listenForMessages { message ->
+                    receivedMessages += "\n$message"
+                    onMessageReceived?.invoke(message)
+                }
+            } catch (e: Exception) {
+                //Toast.makeText(current, "连接失败", Toast.LENGTH_SHORT).show()
+                withContext(Dispatchers.Main) {
+                    isConnect = false
+                    connectionStatus = "Connection failed: ${e.message}"
+                }
+            }
+        }
+        return true
     }
 
     //作用：断开连接
-    fun disConnect(current: Context) {
+    open fun disConnect(current: Context) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 isConnect = false
@@ -147,7 +189,7 @@ class TCPConnecter{
         }
     }
 
-    fun onDestroy() {
+    open fun onDestroy() {
         isConnect = false
         socket?.close()
         writer?.close()
@@ -156,7 +198,7 @@ class TCPConnecter{
 }
 
 @Composable
-fun MainScreen(viewModel: GameViewModel) {
+fun ConnecterMainScreen(viewModel: GameViewModel) {
     val tcpConnecter = remember {
         TCPConnecter()
     }
@@ -169,7 +211,7 @@ fun MainScreen(viewModel: GameViewModel) {
         }
     } else {
         // 用于控制弹窗是否显示
-        var showDialog by remember { mutableStateOf(false) }
+        var showDialog by remember { mutableStateOf(true) }
 
         // 显示弹窗
         if (showDialog) {
@@ -181,15 +223,7 @@ fun MainScreen(viewModel: GameViewModel) {
                     Button(onClick = {
                         showDialog = false
                     }) {
-                        Text("开始")
-                    }
-                },
-                dismissButton = {
-                    Button(onClick = {
-                        // 关闭弹窗
-                        showDialog = false
-                    }) {
-                        Text("退出")
+                        Text("好")
                     }
                 }
             )
@@ -233,47 +267,7 @@ fun TCPClientUI(tcpConnecter: TCPConnecter) {
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Button(onClick = {
-                val portNumber = tcpConnecter.port.toIntOrNull()
-                if (tcpConnecter.ip.isBlank() || portNumber == null) {
-                    Toast.makeText(current, "Invalid IP or Port", Toast.LENGTH_SHORT).show()
-                    return@Button
-                }
-
-                CoroutineScope(Dispatchers.IO).launch {
-                    try {
-                        tcpConnecter.connect()
-
-                        withContext(Dispatchers.Main) {
-                            tcpConnecter.connectionStatus = "Connected to ${tcpConnecter.ip}:$portNumber"
-                            //标记为已连接
-                            tcpConnecter.isConnect = true
-                        }
-
-                        tcpConnecter.listenForMessages { message ->
-                            tcpConnecter.receivedMessages += "\n$message"
-                        }
-
-                        //主线程监听是否断开
-                        while (tcpConnecter.isConnect && tcpConnecter.socket?.isClosed == false) {
-                            delay(500) // 每隔500ms检查一次
-                        }
-                        tcpConnecter.isConnect = false
-                        tcpConnecter.socket?.close()
-                        tcpConnecter.writer?.close()
-                        tcpConnecter.reader?.close()
-                        withContext(Dispatchers.Main) {
-                            Toast.makeText(current, "连接已断开", Toast.LENGTH_SHORT).show()
-                            tcpConnecter.connectionStatus = "Connection closed"
-                        }
-
-                    } catch (e: Exception) {
-                        Toast.makeText(current, "连接失败", Toast.LENGTH_SHORT).show()
-                        withContext(Dispatchers.Main) {
-                            tcpConnecter.isConnect = false
-                            tcpConnecter.connectionStatus = "Connection failed: ${e.message}"
-                        }
-                    }
-                }
+                tcpConnecter.connect()
             }) {
                 Text("Connect")
             }
@@ -353,3 +347,5 @@ fun TCPClientUI(tcpConnecter: TCPConnecter) {
         }
     }
 }
+
+
