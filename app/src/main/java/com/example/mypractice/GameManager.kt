@@ -468,7 +468,7 @@ class GameManager(
                 //恢复操作序列
                 val index = operations.size - 1
                 val operation = operations.last()
-                operations.removeAt(index)
+                operations.remove(operation)
                 //恢复指定操作前的棋局
                 //1.如果是翻面则翻回去
                 if (operation.srcLocation == operation.dstLocation) {
@@ -485,7 +485,7 @@ class GameManager(
                 //3.如果当前操作吃掉了棋子，则将那个棋子复活到原位置
                 var restorePiece: DeadPiece? = null
                 for (deadPiece in deadPieces) {
-                    if (deadPiece.index == index) { //判断棋子是不是在本部死的
+                    if (deadPiece.index == index) { //判断棋子是不是在此步死的
                         restorePiece = deadPiece
                         break
                     }
@@ -529,8 +529,7 @@ class GameManager(
             //记录被吃掉的棋子
             deadPieces.add(DeadPiece(operations.size-1, atePiece, atePiece.position))
             //吃掉棋子
-            currentBoard[col][row].last().isAlive=false     //棋子被吃掉了
-            deadPieces.add(DeadPiece(operations.size, currentBoard[col][row].last(), Pair(col, row)))
+            atePiece.isAlive=false     //棋子被吃掉了
             currentBoard[col][row].removeLast()
             currentBoard[col][row].add(selectedPiece!!)
             //如果对面棋子全部被吃完，游戏结束
