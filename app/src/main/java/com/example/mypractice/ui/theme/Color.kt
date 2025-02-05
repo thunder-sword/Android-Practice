@@ -2,6 +2,8 @@ package com.example.mypractice.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
+val chessBoardColor = Color(0xFFB28752)
+
 val primaryLight = Color(0xFF415F91)
 val onPrimaryLight = Color(0xFFFFFFFF)
 val secondaryLight = Color(0xFF565F71)

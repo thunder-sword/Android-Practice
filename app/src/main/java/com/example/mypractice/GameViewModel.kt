@@ -40,6 +40,7 @@ class ImageLoader(context: Context) {
             R.drawable.bg,
             R.drawable.back,
             R.drawable.r_box,
+            R.drawable.r_minibox,
             R.drawable.b_c,
             R.drawable.b_j,
             R.drawable.b_m,

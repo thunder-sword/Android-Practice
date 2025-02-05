@@ -1,10 +1,12 @@
 package com.example.mypractice
 
+import android.app.Activity
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -17,16 +19,26 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.core.view.WindowCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ViewModelProvider
 import com.example.mypractice.ui.theme.MyPracticeTheme
+import com.example.mypractice.ui.theme.chessBoardColor
+import androidx.compose.material.MaterialTheme as MaterialTheme1
 
 class DrawTest : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -42,7 +54,7 @@ class DrawTest : ComponentActivity() {
             MyPracticeTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colors.background
+                    color = MaterialTheme1.colors.background
                 ) {
                     DrawMain(viewModel)
                 }
@@ -53,7 +65,7 @@ class DrawTest : ComponentActivity() {
 
 //画棋盘
 @Composable
-fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.Local, tcpConnecter: TCPConnecter? = null) {
+fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.Local, tcpConnector: TCPConnector? = null) {
     val current = LocalContext.current
     //点击协程实例
     val scope = rememberCoroutineScope()
@@ -63,7 +75,7 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
             current = current,
             scope = scope,
             onlineState = onlineState,
-            tcpConnecter = tcpConnecter
+            tcpConnector = tcpConnector
         )
     }
 
@@ -71,6 +83,24 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
     LaunchedEffect(Unit) {
         //启动游戏
         gameManager.startGame()
+    }
+
+    // 监听生命周期，在 onDestroy 时清理
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_DESTROY) {
+                gameManager.onDestroy()
+            }
+        }
+
+        // 添加观察者
+        lifecycleOwner.lifecycle.addObserver(observer)
+
+        // 在组件从 Composition 中移除时移除观察者
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
 
     // 屏幕宽高
@@ -206,6 +236,29 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
         )
     }
 
+    // 将状态栏配色设为当前背景配色
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as Activity).window
+            //设置状态栏颜色和背景颜色同步
+            window.statusBarColor = chessBoardColor.toArgb()
+            //设置状态栏图标为深色
+            WindowCompat
+                .getInsetsController(window, view)
+                ?.isAppearanceLightStatusBars = true
+        }
+    }
+
+    //背景图片
+    Image(
+        painter = painterResource(R.drawable.bg),
+        contentDescription = null,
+        contentScale = ContentScale.Crop,
+        modifier = Modifier.fillMaxSize() // 图片填充整个 Box
+    )
+
+    //左上角重新开始按钮
     Box(
         contentAlignment = Alignment.TopStart
     ) {
@@ -218,19 +271,49 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
         }
     }
 
-    val boxModifier = Modifier
-        .fillMaxWidth()
-
-    if(0!=gameManager.localPlayer){
-        boxModifier.graphicsLayer {
-            scaleX = -1f
-            scaleY = -1f
-        } // 垂直对角翻转180度
+    //右下角悔棋按钮
+    Box(
+        contentAlignment = Alignment.BottomEnd
+    ){
+        Button(
+            onClick = {
+                backDialog = true
+            }
+        ){
+            Text(text = "悔棋")
+        }
     }
 
+    //中间上部网络状态显示
+    if (OnlineState.Local != onlineState) {
+        //让文本框支持向下滚动
+        val scrollState1 = rememberScrollState()
+        Box(
+            modifier = Modifier
+                .verticalScroll(scrollState1)
+                .padding(8.dp, top = 50.dp),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            SelectionContainer {
+                Text(tcpConnector!!.connectionStatus, Modifier.padding(8.dp))
+            }
+        }
+    }
+
+    //象棋游戏主容器
     Box(
-        modifier = boxModifier
+        modifier = Modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                // 当前玩家不是玩家1，则垂直对角翻转180度
+                if(0!=gameManager.localPlayer) {
+                    scaleX = -1f
+                    scaleY = -1f
+                }
+            },
     ) {
+
+        //右上角的容器
         Column(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.Top, // 垂直方向上靠上对齐
@@ -260,20 +343,32 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
                     fontSize = 30.sp
                 )
             }
+        }
 
-            if (OnlineState.Local != onlineState) {
-                //让文本框支持向下滚动
-                val scrollState1 = rememberScrollState()
-                Box(
-                    Modifier
-                        .verticalScroll(scrollState1)
-                        .padding(8.dp),
-                    Alignment.Center
-                ) {
-                    SelectionContainer {
-                        Text(tcpConnecter!!.connectionStatus, Modifier.padding(8.dp))
-                    }
-                }
+        //左下角的容器
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth(),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.Start
+            ) {
+                Text(
+                    "玩家1",
+                    color = Color.Red,
+                    fontSize = 40.sp,
+                )
+                Text(
+                    text = " ${gameManager.alivePieces.groupBy { it.camp }[PieceCamp.Red]?.size ?: 0}"
+                            + if (0 == gameManager.currentPlayer) {
+                        "【到你了】"
+                    } else "",
+                    color = Color.Red,
+                    fontSize = 30.sp
+                )
             }
         }
 
@@ -322,39 +417,6 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
                     cellHeight = gameManager.chessBoard.cellHeight
                 )
             }
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth(),
-            verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.Start
-        ) {
-            Text(
-                "玩家1",
-                color = Color.Red,
-                fontSize = 40.sp,
-            )
-            Text(
-                text = " ${gameManager.alivePieces.groupBy { it.camp }[PieceCamp.Red]?.size ?: 0}"
-                        + if (0 == gameManager.currentPlayer) {
-                    "【到你了】"
-                } else "",
-                color = Color.Red,
-                fontSize = 30.sp
-            )
-        }
-    }
-
-    Box(
-        contentAlignment = Alignment.BottomEnd
-    ){
-        Button(
-            onClick = {
-                backDialog = true
-            }
-        ){
-            Text(text = "悔棋")
         }
     }
 }

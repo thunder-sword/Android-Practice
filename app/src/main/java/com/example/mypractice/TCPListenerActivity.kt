@@ -46,7 +46,7 @@ class TCPListenerActivity : ComponentActivity() {
     }
 }
 
-class TCPListener: TCPConnecter(){
+class TCPListener: TCPConnector(){
     internal var serverSocket: ServerSocket? = null
     var serverAddresses by mutableStateOf("")
     var clientAddress by mutableStateOf("")
@@ -249,7 +249,7 @@ fun TCPServerUI(tcpListener: TCPListener) {
         }
 
         Button(onClick = {
-            tcpListener.send(current)
+            tcpListener.send(tcpListener.messageToSend, current)
         }) {
             Text("Send")
         }

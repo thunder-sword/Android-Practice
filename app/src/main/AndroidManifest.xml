@@ -17,7 +17,7 @@
             android:name=".DrawTest"
             android:exported="false" />
         <activity
-            android:name=".TCPConnecterActivity"
+            android:name=".TCPConnectorActivity"
             android:exported="false"
             android:label="@string/title_activity_tcpconnecter"
             android:theme="@style/Theme.MyPractice" />

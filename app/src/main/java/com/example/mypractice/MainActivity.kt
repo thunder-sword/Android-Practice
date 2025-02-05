@@ -24,10 +24,10 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colors.background
                 ) {
-                    MainScreen {
+                    ChessGameMainScreen {
                         x -> when(x) {
                             1 -> startActivity(Intent(this, TCPListenerActivity::class.java))
-                            2 -> startActivity(Intent(this, TCPConnecterActivity::class.java))
+                            2 -> startActivity(Intent(this, TCPConnectorActivity::class.java))
                             3 -> startActivity(Intent(this, DrawTest::class.java))
                         else -> Toast.makeText(this@MainActivity, "未知的跳转页面", Toast.LENGTH_SHORT).show()
                         }
@@ -39,7 +39,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun MainScreen(startUp: (Int) -> Unit) {
+fun ChessGameMainScreen(startUp: (Int) -> Unit) {
     Box (
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
@@ -85,7 +85,7 @@ fun TestMain(){
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colors.background
         ) {
-            MainScreen { _ -> 1 }
+            ChessGameMainScreen { _ -> 1 }
         }
     }
 }

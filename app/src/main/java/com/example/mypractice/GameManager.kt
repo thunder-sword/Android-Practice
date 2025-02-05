@@ -57,7 +57,7 @@ class GameManager(
     private val scope: CoroutineScope,    //在点击事件发生时发起协程，只有在Composable函数创建才能使用动画
 
     val onlineState: OnlineState = OnlineState.Local,        //联机状态
-    val tcpConnecter: TCPConnecter? = null      //所用tcp连接器
+    val tcpConnector: TCPConnector? = null      //所用tcp连接器
 ) {
     //当前游戏状态
     var currentState by mutableStateOf(GameState.Ended)
@@ -76,15 +76,15 @@ class GameManager(
         private set
 
     // 玩家序列，直接用阵营表示
-    val players: Array<PieceCamp> = PieceCamp.values()
+    private val players: Array<PieceCamp> = PieceCamp.values()
     // 当前行动玩家
     var currentPlayer by mutableStateOf(0)
     // 本地玩家下标（联机状态下时本机玩家的阵营下标）
     var localPlayer by mutableStateOf(0)
 
     //当前游戏棋盘状态
-    var currentBoard: Array<Array<MutableList<ChessPiece>>> = Array(chessBoard.cols) { Array(chessBoard.rows) { mutableListOf() } }
-        private set
+    private var currentBoard: Array<Array<MutableList<ChessPiece>>> = Array(chessBoard.cols) { Array(chessBoard.rows) { mutableListOf() } }
+
     //当前存活的棋子列表
     val alivePieces: MutableList<ChessPiece>
         get() = currentBoard.flatten()  // 展平棋盘
@@ -92,22 +92,21 @@ class GameManager(
             .toMutableStateList()
             //.groupBy { it.camp }  // 根据阵营分组
     //当前可触发的棋子列表（每叠棋子最上面那个）
-    val canTapPieces: List<ChessPiece>
+            private val canTapPieces: List<ChessPiece>
         get() = currentBoard.flatten()  //展平棋盘
             .mapNotNull { it.lastOrNull() }       //只取最后一个棋子
 
     //存储自游戏开始以来的所有操作步数，用于悔棋操作
-    var operations: MutableList<Operation> = mutableListOf()
+    private var operations: MutableList<Operation> = mutableListOf()
     //存储已死掉的所有棋子，并记录它死掉时的操作下标和位置
-    var deadPieces: MutableList<DeadPiece> = mutableListOf()
+    private var deadPieces: MutableList<DeadPiece> = mutableListOf()
 
 
     // 所有棋子的坐标
-    var piecesLayout: List<PieceLocation> = listOf()
-        private set
+    private var piecesLayout: List<PieceLocation> = listOf()
+
     // 所有棋子的类型
-    var piecesType: List<Pair<PieceCamp, PieceArm>> = listOf()
-        private set
+    private var piecesType: List<Pair<PieceCamp, PieceArm>> = listOf()
 
     // 内置棋子坐标
     private val defaultLayout: Map<String, List<PieceLocation>> = mapOf(
@@ -153,7 +152,7 @@ class GameManager(
     )
 
     // 当前被选中棋子
-    var selectedPiece by mutableStateOf<ChessPiece?>(null)
+    private var selectedPiece by mutableStateOf<ChessPiece?>(null)
     // 点击事件锁
     private val tapMutex = Mutex()
     // 可到达位置序列
@@ -177,7 +176,7 @@ class GameManager(
     }
 
     //检验当前布局和棋子数是否匹配
-    fun checkMatch(): Boolean {
+    private fun checkMatch(): Boolean {
         //如果数量不对应直接就不匹配
         if(piecesLayout.size != piecesType.size){
             return false
@@ -212,7 +211,7 @@ class GameManager(
     }
 
     //作用：根据当前布局和棋子生成随机棋局
-    fun generateInitialBoard(){
+    private fun generateInitialBoard(){
         //每次生成随机棋局都将当前棋局初始化
         currentBoard = Array(chessBoard.cols) { Array(chessBoard.rows) { mutableListOf() } }
         operations = mutableListOf()
@@ -265,7 +264,7 @@ class GameManager(
     }
 
     //将棋局序列化为字符串
-    fun serializeChessBoard(board: Array<Array<MutableList<ChessPiece>>>): String {
+    private fun serializeChessBoard(board: Array<Array<MutableList<ChessPiece>>>): String {
         val stringBuilder = StringBuilder()
 
         for (row in board) {
@@ -292,7 +291,7 @@ class GameManager(
     }
 
     //将字符串反序列化为棋局
-    fun deserializeChessBoard(serializedBoard: String): Array<Array<MutableList<ChessPiece>>> {
+    private fun deserializeChessBoard(serializedBoard: String): Array<Array<MutableList<ChessPiece>>> {
         val board = Array(9) { Array(10) { mutableListOf<ChessPiece>() } }
         var index = 0
 
@@ -336,7 +335,7 @@ class GameManager(
     }
 
     /**
-     * 绘制棋子
+     * 绘制棋子可到达区域提示格
      * @param drawScope 当前 Canvas 的绘制范围
      * @param imageLoader 获取图片器
      * @param borderLeft 棋盘的左侧空白部分长度
@@ -345,8 +344,12 @@ class GameManager(
      * @param cellHeight 每个格子的高度
      */
     fun drawBox(drawScope: DrawScope, imageLoader: ImageLoader, borderLeft: Float, borderTop: Float, cellWidth: Float, cellHeight: Float) {
-        val image: ImageBitmap = imageLoader.getImage("r_box")!!
+        val bigImage: ImageBitmap = imageLoader.getImage("r_box")!!
+        val miniImage: ImageBitmap = imageLoader.getImage("r_minibox")!!
         for((x, y) in canToLocation) {
+            //如果位置无棋子则画小格子，不为空则画大格子
+            val image = if(currentBoard[x][y].isEmpty()) miniImage else bigImage
+
             val centerX = borderLeft + cellWidth * x
             val centerY = borderTop + cellHeight * y
             val size =
@@ -447,12 +450,12 @@ class GameManager(
     }
 
     //作用：移动指令序列化
-    fun serializeMoveTo(col: Int, row: Int): String{
+    private fun serializeMoveTo(col: Int, row: Int): String{
         return "(${selectedPiece?.position!!.first},${selectedPiece?.position!!.second})->(${col},${row})"
     }
 
     //作用：移动指令反序列化
-    fun deserializeMove(moveString: String): Pair<Pair<Int, Int>, Pair<Int, Int>> {
+    private fun deserializeMove(moveString: String): Pair<Pair<Int, Int>, Pair<Int, Int>> {
         val parts = moveString.split("->")
         if (parts.size != 2) {
             throw IllegalArgumentException("Invalid move string format")
@@ -469,13 +472,12 @@ class GameManager(
     }
 
     //作用：发送信息给远程主机
-    fun sendMessage(message: String){
-        tcpConnecter!!.messageToSend = message
-        tcpConnecter!!.send(current)
+    private fun sendMessage(message: String){
+        tcpConnector!!.send(message, current)
     }
 
     //作用：处理接收来的指令
-    fun handleInst(message: String){
+    private fun handleInst(message: String){
         val (inst, value) = message.split(": ")
         when(inst){
             //如果是移动指令，并且当前并非自己操作，则移动棋子并切换玩家
@@ -570,12 +572,19 @@ class GameManager(
             "chessBoard" -> {
                 if(OnlineState.Client == onlineState){
                     currentBoard = deserializeChessBoard(value)
+                    if ("等待服务器创建棋局..." == blockString){
+                        blockString = "等待服务器决定先手..."
+                    }
                 }
             }
             //如果是客户端，并且收到了当前玩家就更新当前玩家
             "currentPlayer" -> {
-                if(OnlineState.Client == onlineState)
+                if(OnlineState.Client == onlineState) {
                     currentPlayer = value.toInt()
+                    if ("等待服务器决定先手..." == blockString){
+                        blockString = ""
+                    }
+                }
             }
             else -> {
                 //未知指令，将忽略
@@ -638,7 +647,7 @@ class GameManager(
     }
 
     //作用：将选中棋子移动到指定位置
-    suspend fun movePieceTo(col: Int, row: Int){
+    private suspend fun movePieceTo(col: Int, row: Int){
         //切换当前坐标
         selectedPiece?.isOver=false
         currentBoard[selectedPiece?.position!!.first][selectedPiece?.position!!.second].remove(selectedPiece)
@@ -686,21 +695,10 @@ class GameManager(
 
         if (currentState == GameState.Ended) {
             currentState = GameState.Running
-            println("Game started! Current state: ${currentState}")
+            println("Game started! Current state: $currentState")
 
-            //随机选择先手玩家
-            currentPlayer = (0..players.size - 1).random()
-
-            println("chessBoard: ${serializeChessBoard(currentBoard)}")
-            println("currentPlayer: ${currentPlayer}")
-
-            //如果不是本地游戏需要操作
-            if (OnlineState.Local != onlineState){
-                //将接收信息回调函数传入，函数引用
-                tcpConnecter!!.onMessageReceived = ::handleInst
-            }
-            //如果是服务器
-            if (OnlineState.Server == onlineState){
+            //不是客户端则需要初始化棋盘
+            if (OnlineState.Client != onlineState){
                 //给当前布局和棋子数赋值
                 piecesLayout = defaultLayout["十字交叉型"]!!
                 piecesType = defaultType["等量经典棋数"]!!
@@ -709,11 +707,32 @@ class GameManager(
 
                 //如果合适则自动生成随机棋局
                 generateInitialBoard()
+            }
 
+            //随机选择先手玩家
+            currentPlayer = players.indices.random()
+
+            println("chessBoard: ${serializeChessBoard(currentBoard)}")
+            println("currentPlayer: $currentPlayer")
+
+            //如果不是本地游戏需要操作
+            if (OnlineState.Local != onlineState){
+                //将接收信息回调函数传入，函数引用
+                tcpConnector!!.onMessageReceived = ::handleInst
+            }
+            //如果是客户端
+            if (OnlineState.Client == onlineState){
+                //设置当前玩家为玩家2
+                localPlayer = 1
+                //等待服务器初始化房间
+                blockString = "等待服务器创建棋局..."
+            }
+            //如果是服务器
+            else if (OnlineState.Server == onlineState){
                 //发送棋局
                 sendMessage("chessBoard: ${serializeChessBoard(currentBoard)}")
                 //发送先手玩家
-                sendMessage("currentPlayer: ${currentPlayer}")
+                sendMessage("currentPlayer: $currentPlayer")
             }
         } else {
             println("Game is already running.")
@@ -721,10 +740,10 @@ class GameManager(
         }
     }
 
-    fun endGame() {
+    private fun endGame() {
         if (currentState == GameState.Running) {
             currentState = GameState.Ended
-            println("Game ended! Current state: ${currentState}")
+            println("Game ended! Current state: $currentState")
         } else {
             println("Game is already ended.")
         }
@@ -748,6 +767,11 @@ class GameManager(
             sendMessage("isRestart: query")
             blockString = "正在询问对方..."
         }
+    }
+
+    //作用：回收
+    fun onDestroy(){
+        tcpConnector?.onDestroy()
     }
 }
 

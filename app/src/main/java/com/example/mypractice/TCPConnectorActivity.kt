@@ -32,15 +32,16 @@ import androidx.lifecycle.ViewModelProvider
 import com.example.mypractice.ui.theme.MyPracticeTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.PrintWriter
 import java.net.Socket
 
-class TCPConnecterActivity : ComponentActivity() {
+class TCPConnectorActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -56,29 +57,31 @@ class TCPConnecterActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colors.background
                 ) {
-                    ConnecterMainScreen(viewModel)
+                    ConnectorMainScreen(viewModel)
                 }
             }
         }
     }
 }
 
-open class TCPConnecter{
+open class TCPConnector{
     internal var socket: Socket? = null
     internal var writer: PrintWriter? = null
     internal var reader: BufferedReader? = null
     var isConnect by mutableStateOf(false)
-    var ip by mutableStateOf("192.168.150.66")
-    var port by mutableStateOf("8888")
+    var ip by mutableStateOf("")
+    var port by mutableStateOf("4399")
     var connectionStatus by mutableStateOf("Not Connected")
     var messageToSend by mutableStateOf("")
     var receivedMessages by mutableStateOf("")
-    var message by mutableStateOf("")
+    private var message by mutableStateOf("")
+
+    private val sendMutex = Mutex()
 
     var onMessageReceived: ((String) -> Unit)? = null
 
     //作用：发送消息
-    fun send(current: Context){
+    fun send(message: String, current: Context){
         // 发送前检测socket是否处于连接状态
         if (!isConnect || null == socket || socket?.isClosed == true || socket?.isInputShutdown == true || socket?.isOutputShutdown == true) {
             isConnect = false
@@ -86,22 +89,25 @@ open class TCPConnecter{
             return
         }
 
-        if (messageToSend.isBlank()) {
+        if (message.isBlank()) {
             Toast.makeText(current, "发送内容不能为空", Toast.LENGTH_SHORT).show()
             return
         }
 
         CoroutineScope(Dispatchers.IO).launch {
-            try {
-                writer?.println(messageToSend)
-                withContext(Dispatchers.Main) {
-                    receivedMessages += "\nSent: ${messageToSend}"
-                    //发送信息后清空输入框
-                    messageToSend = ""
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    receivedMessages += "\nFailed to send: ${e.message}"
+            sendMutex.withLock {    //加锁确保发送顺序
+                try {
+                    writer?.println(message)
+                    writer?.flush()
+                    withContext(Dispatchers.Main) {
+                        receivedMessages += "\nSent: $message"
+                        //发送信息后清空输入框
+                        messageToSend = ""
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        receivedMessages += "\nFailed to send: ${e.message}"
+                    }
                 }
             }
         }
@@ -198,16 +204,16 @@ open class TCPConnecter{
 }
 
 @Composable
-fun ConnecterMainScreen(viewModel: GameViewModel) {
-    val tcpConnecter = remember {
-        TCPConnecter()
+fun ConnectorMainScreen(viewModel: GameViewModel) {
+    val tcpConnector = remember {
+        TCPConnector()
     }
-    if (!tcpConnecter.isConnect) {
+    if (!tcpConnector.isConnect) {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            TCPClientUI(tcpConnecter)
+            TCPClientUI(tcpConnector)
         }
     } else {
         // 用于控制弹窗是否显示
@@ -229,12 +235,12 @@ fun ConnecterMainScreen(viewModel: GameViewModel) {
             )
         }
 
-        ChessBoard(viewModel, OnlineState.Client, tcpConnecter)
+        ChessBoard(viewModel, OnlineState.Client, tcpConnector)
     }
 }
 
 @Composable
-fun TCPClientUI(tcpConnecter: TCPConnecter) {
+fun TCPClientUI(tcpConnector: TCPConnector) {
     val current = LocalContext.current
 
     Column(
@@ -245,8 +251,8 @@ fun TCPClientUI(tcpConnecter: TCPConnecter) {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         TextField(
-            value = tcpConnecter.ip,
-            onValueChange = { tcpConnecter.ip = it },
+            value = tcpConnector.ip,
+            onValueChange = { tcpConnector.ip = it },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(8.dp),
@@ -254,8 +260,8 @@ fun TCPClientUI(tcpConnecter: TCPConnecter) {
         )
 
         TextField(
-            value = tcpConnecter.port,
-            onValueChange = { tcpConnecter.port = it },
+            value = tcpConnector.port,
+            onValueChange = { tcpConnector.port = it },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(8.dp),
@@ -267,14 +273,14 @@ fun TCPClientUI(tcpConnecter: TCPConnecter) {
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Button(onClick = {
-                tcpConnecter.connect()
+                tcpConnector.connect()
             }) {
                 Text("Connect")
             }
 
             Button(
                 onClick = {
-                    tcpConnecter.disConnect(current)
+                    tcpConnector.disConnect(current)
                 }
             ) {
                 Text("Disconnect")
@@ -290,7 +296,7 @@ fun TCPClientUI(tcpConnecter: TCPConnecter) {
                 .padding(8.dp)
         ) {
             SelectionContainer {
-                Text(tcpConnecter.connectionStatus, Modifier.padding(8.dp))
+                Text(tcpConnector.connectionStatus, Modifier.padding(8.dp))
             }
         }
 
@@ -304,8 +310,8 @@ fun TCPClientUI(tcpConnecter: TCPConnecter) {
                 .padding(8.dp)
         ) {
             TextField(
-                value = tcpConnecter.messageToSend,
-                onValueChange = { tcpConnecter.messageToSend = it },
+                value = tcpConnector.messageToSend,
+                onValueChange = { tcpConnector.messageToSend = it },
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(8.dp),
@@ -313,12 +319,12 @@ fun TCPClientUI(tcpConnecter: TCPConnecter) {
             )
         }
         //每次输入消息时自动滑动到最下面
-        LaunchedEffect(tcpConnecter.messageToSend) {
+        LaunchedEffect(tcpConnector.messageToSend) {
             scrollState2.scrollTo(scrollState2.maxValue)
         }
 
         Button(onClick = {
-            tcpConnecter.send(current)
+            tcpConnector.send(tcpConnector.messageToSend, current)
         }) {
             Text("Send")
         }
@@ -334,7 +340,7 @@ fun TCPClientUI(tcpConnecter: TCPConnecter) {
         ) {
             SelectionContainer {
                 Text(
-                    tcpConnecter.receivedMessages,
+                    tcpConnector.receivedMessages,
                     Modifier
                         .fillMaxWidth()
                         .padding(8.dp)
@@ -342,7 +348,7 @@ fun TCPClientUI(tcpConnecter: TCPConnecter) {
             }
         }
         //每次更新消息时自动滑动到最下面
-        LaunchedEffect(tcpConnecter.receivedMessages) {
+        LaunchedEffect(tcpConnector.receivedMessages) {
             scrollState3.scrollTo(scrollState3.maxValue)
         }
     }
