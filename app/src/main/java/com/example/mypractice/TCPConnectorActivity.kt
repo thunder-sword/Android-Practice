@@ -30,12 +30,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.lifecycle.ViewModelProvider
 import com.example.mypractice.ui.theme.MyPracticeTheme
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.PrintWriter
@@ -65,18 +62,24 @@ class TCPConnectorActivity : ComponentActivity() {
 }
 
 open class TCPConnector{
-    internal var socket: Socket? = null
-    internal var writer: PrintWriter? = null
-    internal var reader: BufferedReader? = null
+    protected var socket: Socket? = null
+    protected var writer: PrintWriter? = null
+    protected var reader: BufferedReader? = null
     var isConnect by mutableStateOf(false)
-    var ip by mutableStateOf("")
+    var ip by mutableStateOf("192.168.2.101")
     var port by mutableStateOf("4399")
     var connectionStatus by mutableStateOf("Not Connected")
     var messageToSend by mutableStateOf("")
     var receivedMessages by mutableStateOf("")
     private var message by mutableStateOf("")
 
-    private val sendMutex = Mutex()
+    //重连相关变量
+    protected var reconnectAttempts = 0
+    protected val maxReconnectAttempts = 100 // 最大重连次数
+    protected val reconnectInterval = 3000L // 重连间隔时间（毫秒）
+    var isReconnecting by mutableStateOf(false)
+
+    protected val mutex = Mutex()
 
     var onMessageReceived: ((String) -> Unit)? = null
 
@@ -95,7 +98,7 @@ open class TCPConnector{
         }
 
         CoroutineScope(Dispatchers.IO).launch {
-            sendMutex.withLock {    //加锁确保发送顺序
+            mutex.withLock {    //加锁确保发送顺序
                 try {
                     writer?.println(message)
                     writer?.flush()
@@ -170,11 +173,54 @@ open class TCPConnector{
                 writer?.close()
                 reader?.close()
                 withContext(Dispatchers.Main) {
-                    connectionStatus = "Connection closed"
+                    connectionStatus = "Make connection closed"
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
                     Toast.makeText(current, "断开连接失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    //作用：重连
+    open fun startReconnect(onReconnectSuccess: (() -> Unit)? = null) {
+        println("当前重连次数：$reconnectAttempts")
+        if (reconnectAttempts >= maxReconnectAttempts) {
+            connectionStatus = "Max reconnection attempts reached"
+            return
+        }
+
+        isReconnecting = true
+        reconnectAttempts++
+
+        CoroutineScope(Dispatchers.IO).launch {
+            mutex.withLock {
+                try {
+                    withContext(Dispatchers.Main) {
+                        connectionStatus = "Reconnecting... Attempt $reconnectAttempts"
+                    }
+
+                    if (_connect()) {
+                        isConnect = true
+                        isReconnecting = false
+                        reconnectAttempts = 0
+
+                        withContext(Dispatchers.Main) {
+                            connectionStatus = "Reconnected to ${ip}:${port}"
+                            onReconnectSuccess?.invoke() // 调用回调
+                        }
+
+                        listenForMessages { message ->
+                            receivedMessages += "\n$message"
+                            onMessageReceived?.invoke(message)
+                        }
+                    } else {
+                        delay(reconnectInterval)
+                        startReconnect()
+                    }
+                } catch (e: Exception) {
+                    startReconnect()
                 }
             }
         }
@@ -208,7 +254,7 @@ fun ConnectorMainScreen(viewModel: GameViewModel) {
     val tcpConnector = remember {
         TCPConnector()
     }
-    if (!tcpConnector.isConnect) {
+    if (!tcpConnector.isConnect && !tcpConnector.isReconnecting) {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center

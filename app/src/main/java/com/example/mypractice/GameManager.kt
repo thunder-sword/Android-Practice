@@ -586,6 +586,53 @@ class GameManager(
                     }
                 }
             }
+            //处理提示信息
+            "Info" -> {
+                when(value){
+                    //当遇到网络断连的状况，客户端自动请求重连，服务端选择是否等待重连
+                    "Connection closed." -> {
+                        //如果游戏已结束则不用管
+                        if(GameState.Ended == currentState)
+                            return
+                        if(OnlineState.Client == onlineState){
+                            blockString = "与服务器连接断开，正在尝试回连..."
+                            tcpConnector?.startReconnect{
+                                //println("已执行成功回连成功回调函数")
+                                blockString = ""
+                                Toast.makeText(current, "回连成功", Toast.LENGTH_SHORT).show()
+                            }
+                        } else if(OnlineState.Server == onlineState){
+                            blockQueryString = "客户端断开连接，是否等待重连？"
+                            onBlockQueryYes = {
+                                blockString = "正在等待回连..."
+                                tcpConnector?.startReconnect{
+                                    blockString = ""
+                                    Toast.makeText(current, "客户端已回连", Toast.LENGTH_SHORT).show()
+                                    //发送棋局
+                                    sendMessage("chessBoard: ${serializeChessBoard(currentBoard)}")
+                                    //发送当前玩家
+                                    sendMessage("currentPlayer: $currentPlayer")
+                                }
+                                blockQueryString = ""
+                            }
+                            onBlockQueryNo = {
+                                Toast.makeText(current, "已结束游戏", Toast.LENGTH_SHORT).show()
+                                tcpConnector?.disConnect(current)
+                                endGame()
+                                blockQueryString = ""
+                            }
+                        }
+                    }
+                }
+            }
+            //报错信息给出提示
+            "Error" -> {
+                scope.launch {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(current, "Error: $value", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
             else -> {
                 //未知指令，将忽略
                 println("未知的指令：${message}")

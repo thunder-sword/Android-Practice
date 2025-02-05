@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.zIndex
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -132,7 +133,7 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
     if (!gameManager.blockQueryString.isEmpty()) {
         AlertDialog(
             onDismissRequest = { /* 不允许点击外部关闭弹窗 */ },
-            title = { Text(text = "对方请求") },
+            title = { Text(text = "提示") },
             text = { Text(text = gameManager.blockQueryString) },
             confirmButton = {
                 Button(onClick = {
@@ -154,7 +155,7 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
         )
     }
 
-    //如果有block信息则显示
+    //如果有block信息则显示【缺点是返回键无法退出Activity】
     if (!gameManager.blockString.isEmpty()) {
         Dialog(
             onDismissRequest = { /* 不允许点击外部关闭弹窗 */ },
@@ -236,30 +237,9 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
         )
     }
 
-    // 将状态栏配色设为当前背景配色
-    val view = LocalView.current
-    if (!view.isInEditMode) {
-        SideEffect {
-            val window = (view.context as Activity).window
-            //设置状态栏颜色和背景颜色同步
-            window.statusBarColor = chessBoardColor.toArgb()
-            //设置状态栏图标为深色
-            WindowCompat
-                .getInsetsController(window, view)
-                ?.isAppearanceLightStatusBars = true
-        }
-    }
-
-    //背景图片
-    Image(
-        painter = painterResource(R.drawable.bg),
-        contentDescription = null,
-        contentScale = ContentScale.Crop,
-        modifier = Modifier.fillMaxSize() // 图片填充整个 Box
-    )
-
     //左上角重新开始按钮
     Box(
+        modifier = Modifier.zIndex(1f), //使其不会被覆盖
         contentAlignment = Alignment.TopStart
     ) {
         Button(
@@ -273,6 +253,7 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
 
     //右下角悔棋按钮
     Box(
+        modifier = Modifier.zIndex(1f), //使其不会被覆盖
         contentAlignment = Alignment.BottomEnd
     ){
         Button(
@@ -284,140 +265,167 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
         }
     }
 
-    //中间上部网络状态显示
-    if (OnlineState.Local != onlineState) {
-        //让文本框支持向下滚动
-        val scrollState1 = rememberScrollState()
-        Box(
-            modifier = Modifier
-                .verticalScroll(scrollState1)
-                .padding(8.dp, top = 50.dp),
-            contentAlignment = Alignment.TopCenter
-        ) {
-            SelectionContainer {
-                Text(tcpConnector!!.connectionStatus, Modifier.padding(8.dp))
+    //主棋盘容器
+    Box(modifier = Modifier.fillMaxSize()) {
+
+        //中间上部网络状态显示
+        if (OnlineState.Local != onlineState) {
+            //让文本框支持向下滚动
+            val scrollState1 = rememberScrollState()
+            Box(
+                modifier = Modifier
+                    .verticalScroll(scrollState1)
+                    .padding(8.dp, top = 50.dp),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                SelectionContainer {
+                    Text(tcpConnector!!.connectionStatus, Modifier.padding(8.dp))
+                }
             }
         }
-    }
 
-    //象棋游戏主容器
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .graphicsLayer {
-                // 当前玩家不是玩家1，则垂直对角翻转180度
-                if(0!=gameManager.localPlayer) {
-                    scaleX = -1f
-                    scaleY = -1f
-                }
-            },
-    ) {
+        // 将状态栏配色设为当前背景配色
+        val view = LocalView.current
+        if (!view.isInEditMode) {
+            SideEffect {
+                val window = (view.context as Activity).window
+                //设置状态栏颜色和背景颜色同步
+                window.statusBarColor = chessBoardColor.toArgb()
+                //设置状态栏图标为深色
+                WindowCompat
+                    .getInsetsController(window, view)
+                    ?.isAppearanceLightStatusBars = true
+            }
+        }
 
-        //右上角的容器
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.Top, // 垂直方向上靠上对齐
-            horizontalAlignment = Alignment.CenterHorizontally // 水平方向上居中对齐
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .graphicsLayer {
+        //背景图片
+        Image(
+            painter = painterResource(R.drawable.bg),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize() // 图片填充整个 Box
+        )
+
+        //象棋游戏主容器
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    // 当前玩家不是玩家1，则垂直对角翻转180度
+                    if (0 != gameManager.localPlayer) {
                         scaleX = -1f
                         scaleY = -1f
-                    }, // 垂直对角翻转180度
-                verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.Start
-            ) {
-                Text(
-                    "玩家2",
-                    color = Color.Blue,
-                    fontSize = 40.sp
-                )
-                Text(
-                    text = " ${gameManager.alivePieces.groupBy { it.camp }[PieceCamp.Black]?.size ?: 0}"
-                            + if (1 == gameManager.currentPlayer) {
-                        "【到你了】"
-                    } else "",
-                    color = Color.Blue,
-                    fontSize = 30.sp
-                )
-            }
-        }
-
-        //左下角的容器
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth(),
-                verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.Start
-            ) {
-                Text(
-                    "玩家1",
-                    color = Color.Red,
-                    fontSize = 40.sp,
-                )
-                Text(
-                    text = " ${gameManager.alivePieces.groupBy { it.camp }[PieceCamp.Red]?.size ?: 0}"
-                            + if (0 == gameManager.currentPlayer) {
-                        "【到你了】"
-                    } else "",
-                    color = Color.Red,
-                    fontSize = 30.sp
-                )
-            }
-        }
-
-        // Box用于居中棋盘
-        Box(
-            modifier = Modifier
-                .fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            // 绘制棋盘
-            Canvas(
-                modifier = Modifier
-                    .size(width = chessBoardWidth, height = chessBoardHeight)
-                    .pointerInput(Unit) {
-                        detectTapGestures { offset ->
-                            gameManager.handleTap(offset)
-                        }
                     }
-            ) {
-                //绘制棋盘
-                gameManager.chessBoard.initialize(size)
-                gameManager.chessBoard.draw(this, imageLoader = viewModel.imageLoader)
+                },
+        ) {
 
-                // 绘制棋子图片
-                for (piece in gameManager.alivePieces) {
-                    //黑子的正面棋子需要旋转180度
-                    val isRotate: Boolean = (piece.isFront && PieceCamp.Black == piece.camp)
-                    piece.draw(
+            //右上角的容器
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.Top, // 垂直方向上靠上对齐
+                horizontalAlignment = Alignment.CenterHorizontally // 水平方向上居中对齐
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            scaleX = -1f
+                            scaleY = -1f
+                        }, // 垂直对角翻转180度
+                    verticalAlignment = Alignment.Bottom,
+                    horizontalArrangement = Arrangement.Start
+                ) {
+                    Text(
+                        "玩家2",
+                        color = Color.Blue,
+                        fontSize = 40.sp
+                    )
+                    Text(
+                        text = " ${gameManager.alivePieces.groupBy { it.camp }[PieceCamp.Black]?.size ?: 0}"
+                                + if (1 == gameManager.currentPlayer) {
+                            "【到你了】"
+                        } else "",
+                        color = Color.Blue,
+                        fontSize = 30.sp
+                    )
+                }
+            }
+
+            //左下角的容器
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth(),
+                    verticalAlignment = Alignment.Bottom,
+                    horizontalArrangement = Arrangement.Start
+                ) {
+                    Text(
+                        "玩家1",
+                        color = Color.Red,
+                        fontSize = 40.sp,
+                    )
+                    Text(
+                        text = " ${gameManager.alivePieces.groupBy { it.camp }[PieceCamp.Red]?.size ?: 0}"
+                                + if (0 == gameManager.currentPlayer) {
+                            "【到你了】"
+                        } else "",
+                        color = Color.Red,
+                        fontSize = 30.sp
+                    )
+                }
+            }
+
+            // Box用于居中棋盘
+            Box(
+                modifier = Modifier
+                    .fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                // 绘制棋盘
+                Canvas(
+                    modifier = Modifier
+                        .size(width = chessBoardWidth, height = chessBoardHeight)
+                        .pointerInput(Unit) {
+                            detectTapGestures { offset ->
+                                gameManager.handleTap(offset)
+                            }
+                        }
+                ) {
+                    //绘制棋盘
+                    gameManager.chessBoard.initialize(size)
+                    gameManager.chessBoard.draw(this, imageLoader = viewModel.imageLoader)
+
+                    // 绘制棋子图片
+                    for (piece in gameManager.alivePieces) {
+                        //黑子的正面棋子需要旋转180度
+                        val isRotate: Boolean = (piece.isFront && PieceCamp.Black == piece.camp)
+                        piece.draw(
+                            this,
+                            imageLoader = viewModel.imageLoader,
+                            borderLeft = gameManager.chessBoard.borderLeft,
+                            borderTop = gameManager.chessBoard.borderTop,
+                            cellWidth = gameManager.chessBoard.cellWidth,
+                            cellHeight = gameManager.chessBoard.cellHeight,
+                            isRotate = isRotate
+                        )
+                    }
+
+                    // 绘制可到达位置提示格
+                    gameManager.drawBox(
                         this,
                         imageLoader = viewModel.imageLoader,
                         borderLeft = gameManager.chessBoard.borderLeft,
                         borderTop = gameManager.chessBoard.borderTop,
                         cellWidth = gameManager.chessBoard.cellWidth,
-                        cellHeight = gameManager.chessBoard.cellHeight,
-                        isRotate = isRotate
+                        cellHeight = gameManager.chessBoard.cellHeight
                     )
                 }
-
-                // 绘制可到达位置提示格
-                gameManager.drawBox(
-                    this,
-                    imageLoader = viewModel.imageLoader,
-                    borderLeft = gameManager.chessBoard.borderLeft,
-                    borderTop = gameManager.chessBoard.borderTop,
-                    cellWidth = gameManager.chessBoard.cellWidth,
-                    cellHeight = gameManager.chessBoard.cellHeight
-                )
             }
         }
+
     }
 }
 

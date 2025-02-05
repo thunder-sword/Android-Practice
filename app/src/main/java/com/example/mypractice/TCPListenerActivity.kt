@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
 import com.example.mypractice.ui.theme.MyPracticeTheme
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.withLock
 import java.io.*
 import java.net.*
 
@@ -127,6 +128,67 @@ class TCPListener: TCPConnector(){
         }
     }
 
+    //重载重连函数
+    override fun startReconnect(onReconnectSuccess: (() -> Unit)?) {
+        if (reconnectAttempts >= maxReconnectAttempts) {
+            connectionStatus = "Max reconnection attempts reached"
+            return
+        }
+
+        isReconnecting = true
+        reconnectAttempts++
+
+        CoroutineScope(Dispatchers.IO).launch {
+            mutex.withLock {
+                try {
+                    withContext(Dispatchers.Main) {
+                        connectionStatus = "Reconnecting... Attempt $reconnectAttempts"
+                    }
+
+                    // 关闭旧的 ServerSocket 和 Socket
+                    serverSocket?.close()
+                    socket?.close()
+
+                    // 重新启动 ServerSocket
+                    serverSocket = ServerSocket(port.toInt())
+                    serverAddresses = getLocalIPAddresses().map { "$it:$port" }.joinToString("\n")
+
+                    withContext(Dispatchers.Main) {
+                        connectionStatus = "Server running on\n$serverAddresses"
+                    }
+
+                    // 等待客户端连接
+                    socket = serverSocket!!.accept()
+                    writer = PrintWriter(socket!!.getOutputStream(), true)
+                    reader = BufferedReader(InputStreamReader(socket!!.getInputStream()))
+
+                    isConnect = true
+                    isReconnecting = false
+                    reconnectAttempts = 0
+
+                    clientAddress = "${socket?.inetAddress?.hostAddress}:${socket?.port}"
+
+                    withContext(Dispatchers.Main) {
+                        connectionStatus = "Client reconnected from $clientAddress"
+                        onReconnectSuccess?.invoke() // 调用回调
+                    }
+
+                    // 重新开始监听消息
+                    listenForMessages { message ->
+                        receivedMessages += "\n$message"
+                        onMessageReceived?.invoke(message)
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        connectionStatus = "Reconnection failed: ${e.message}"
+                    }
+                    delay(reconnectInterval)
+                    startReconnect() // 继续尝试重连
+                }
+            }
+        }
+    }
+
     //重载销毁函数
     override fun onDestroy() {
         super.onDestroy()
@@ -142,7 +204,7 @@ fun ListenerMainScreen(viewModel: GameViewModel) {
         TCPListener()
     }
 
-    if (!tcpListener.isConnect) {
+    if (!tcpListener.isConnect && null == tcpListener.serverSocket) {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
@@ -152,7 +214,6 @@ fun ListenerMainScreen(viewModel: GameViewModel) {
     } else {
         // 用于控制弹窗是否显示
         var showDialog by remember { mutableStateOf(true) }
-
         // 显示弹窗
         if (showDialog) {
             AlertDialog(
