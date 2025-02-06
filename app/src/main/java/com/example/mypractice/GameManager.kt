@@ -1,6 +1,7 @@
 package com.example.mypractice
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.runtime.*
@@ -70,6 +71,9 @@ class GameManager(
     var blockQueryString by mutableStateOf("")
     var onBlockQueryYes: (() -> Unit)? = null
     var onBlockQueryNo: (() -> Unit)? = null
+
+    //聊天消息
+    var chatMessage by mutableStateOf("")
 
     //棋盘实例
     var chessBoard: ChessBoard = ChessBoard()
@@ -568,6 +572,19 @@ class GameManager(
                     }
                 }
             }
+            //收到请求则返回数据
+            "query" -> {
+                when(value){
+                    "chessBoard" -> {
+                        //发送棋局
+                        sendMessage("chessBoard: ${serializeChessBoard(currentBoard)}")
+                    }
+                    "currentPlayer" -> {
+                        //发送当前玩家
+                        sendMessage("currentPlayer: $currentPlayer")
+                    }
+                }
+            }
             //如果是客户端，并且收到了棋局就更新棋局
             "chessBoard" -> {
                 if(OnlineState.Client == onlineState){
@@ -598,27 +615,29 @@ class GameManager(
                             blockString = "与服务器连接断开，正在尝试回连..."
                             tcpConnector?.startReconnect{
                                 //println("已执行成功回连成功回调函数")
-                                blockString = ""
                                 Toast.makeText(current, "回连成功", Toast.LENGTH_SHORT).show()
+                                blockString = "等待服务器创建棋局..."
+                                //请求棋局
+                                sendMessage("query: chessBoard")
+                                //请求当前玩家
+                                sendMessage("query: currentPlayer")
                             }
                         } else if(OnlineState.Server == onlineState){
+                            //先断开连接，不然容易导致回连到失效Socket
+                            tcpConnector?.disConnect(current)
                             blockQueryString = "客户端断开连接，是否等待重连？"
                             onBlockQueryYes = {
                                 blockString = "正在等待回连..."
                                 tcpConnector?.startReconnect{
                                     blockString = ""
                                     Toast.makeText(current, "客户端已回连", Toast.LENGTH_SHORT).show()
-                                    //发送棋局
-                                    sendMessage("chessBoard: ${serializeChessBoard(currentBoard)}")
-                                    //发送当前玩家
-                                    sendMessage("currentPlayer: $currentPlayer")
                                 }
                                 blockQueryString = ""
                             }
                             onBlockQueryNo = {
                                 Toast.makeText(current, "已结束游戏", Toast.LENGTH_SHORT).show()
-                                tcpConnector?.disConnect(current)
                                 endGame()
+                                (current as? Activity)?.finish()
                                 blockQueryString = ""
                             }
                         }
@@ -632,6 +651,10 @@ class GameManager(
                         Toast.makeText(current, "Error: $value", Toast.LENGTH_LONG).show()
                     }
                 }
+            }
+            //聊天消息则自动显示
+            "chatMessage" -> {
+                chatMessage = value
             }
             else -> {
                 //未知指令，将忽略
@@ -773,13 +796,17 @@ class GameManager(
                 localPlayer = 1
                 //等待服务器初始化房间
                 blockString = "等待服务器创建棋局..."
+                //请求棋局
+                sendMessage("query: chessBoard")
+                //请求当前玩家
+                sendMessage("query: currentPlayer")
             }
             //如果是服务器
             else if (OnlineState.Server == onlineState){
-                //发送棋局
-                sendMessage("chessBoard: ${serializeChessBoard(currentBoard)}")
-                //发送先手玩家
-                sendMessage("currentPlayer: $currentPlayer")
+//                //发送棋局
+//                sendMessage("chessBoard: ${serializeChessBoard(currentBoard)}")
+//                //发送先手玩家
+//                sendMessage("currentPlayer: $currentPlayer")
             }
         } else {
             println("Game is already running.")

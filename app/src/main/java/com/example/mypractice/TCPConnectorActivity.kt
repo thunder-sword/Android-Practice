@@ -66,7 +66,7 @@ open class TCPConnector{
     protected var writer: PrintWriter? = null
     protected var reader: BufferedReader? = null
     var isConnect by mutableStateOf(false)
-    var ip by mutableStateOf("192.168.2.101")
+    var ip by mutableStateOf("")
     var port by mutableStateOf("4399")
     var connectionStatus by mutableStateOf("Not Connected")
     var messageToSend by mutableStateOf("")
@@ -130,7 +130,7 @@ open class TCPConnector{
     }
 
     //作用：连接函数
-    open fun connect(): Boolean {
+    open fun connect(onConnectSuccess: (() -> Unit)? = null): Boolean {
         val portNumber = port.toIntOrNull()
         if (ip.isBlank() || portNumber == null) {
             //Toast.makeText(current, "Invalid IP or Port", Toast.LENGTH_SHORT).show()
@@ -147,6 +147,7 @@ open class TCPConnector{
 
                 withContext(Dispatchers.Main) {
                     connectionStatus = "Connected to ${ip}:$portNumber"
+                    onConnectSuccess?.invoke() //回调函数调用
                 }
 
                 listenForMessages { message ->

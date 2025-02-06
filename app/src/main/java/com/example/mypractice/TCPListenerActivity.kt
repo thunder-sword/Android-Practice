@@ -66,7 +66,7 @@ class TCPListener: TCPConnector(){
     }
 
     //重载连接函数
-    override fun connect(): Boolean {
+    override fun connect(onConnectSuccess: (() -> Unit)?): Boolean {
         val portNumber = port.toIntOrNull()
         if (portNumber == null) {
             return false
@@ -94,6 +94,7 @@ class TCPListener: TCPConnector(){
 
                 withContext(Dispatchers.Main) {
                     connectionStatus = "Client connected from $clientAddress"
+                    onConnectSuccess?.invoke() //回调函数调用
                 }
 
                 listenForMessages { message ->

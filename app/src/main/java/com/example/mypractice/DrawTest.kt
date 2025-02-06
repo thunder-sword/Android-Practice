@@ -5,8 +5,11 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -17,6 +20,8 @@ import androidx.compose.material.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
@@ -27,11 +32,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
@@ -39,6 +42,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ViewModelProvider
 import com.example.mypractice.ui.theme.MyPracticeTheme
 import com.example.mypractice.ui.theme.chessBoardColor
+import kotlinx.coroutines.delay
 import androidx.compose.material.MaterialTheme as MaterialTheme1
 
 class DrawTest : ComponentActivity() {
@@ -63,6 +67,49 @@ class DrawTest : ComponentActivity() {
         }
     }
 }
+
+//画对话气泡
+@Composable
+fun ChatBubble(
+    message: String,
+    isFromMe: Boolean = false,
+    fadeDelay: Long = 5000,  // 5秒后触发
+    fadeDuration: Int = 1000, // 动画持续1秒
+    onFaded: (() -> Unit)? = null
+) {
+    var isVisible by remember { mutableStateOf(true) }
+    val alpha by animateFloatAsState(
+        targetValue = if (isVisible) 1f else 0f,
+        animationSpec = tween(durationMillis = fadeDuration)
+    )
+
+    LaunchedEffect(Unit) {
+        delay(fadeDelay)
+        isVisible = false
+        onFaded?.invoke()
+    }
+
+    // 颜色
+    val backgroundColor = if (!isFromMe) Color(0xFF4CAF50) else Color(0xFFE0E0E0)
+
+    // 透明后删除气泡
+    if (isVisible) {
+        Box(
+            modifier = Modifier
+                .alpha(alpha)
+                .clip(RoundedCornerShape(12.dp))
+                .background(backgroundColor)
+                .padding(12.dp)
+        ) {
+            Text(
+                text = message,
+                color = if (!isFromMe) Color.White else Color.Black,
+                fontSize = 16.sp
+            )
+        }
+    }
+}
+
 
 //画棋盘
 @Composable
@@ -130,7 +177,7 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
     }
 
     //如果有blockQuery信息则显示
-    if (!gameManager.blockQueryString.isEmpty()) {
+    if (gameManager.blockQueryString.isNotEmpty()) {
         AlertDialog(
             onDismissRequest = { /* 不允许点击外部关闭弹窗 */ },
             title = { Text(text = "提示") },
@@ -156,13 +203,9 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
     }
 
     //如果有block信息则显示【缺点是返回键无法退出Activity】
-    if (!gameManager.blockString.isEmpty()) {
+    if (gameManager.blockString.isNotEmpty()) {
         Dialog(
-            onDismissRequest = { /* 不允许点击外部关闭弹窗 */ },
-            properties = DialogProperties(
-                dismissOnBackPress = false,
-                dismissOnClickOutside = false
-            )
+            onDismissRequest = { /* 不允许点击外部关闭弹窗 */ }
         ) {
             // 居中显示的加载提示框
             Surface(
@@ -237,97 +280,90 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
         )
     }
 
-    //左上角重新开始按钮
+    //本用户聊天气泡显示字符串
+    var showMyChatBubble by remember { mutableStateOf("") }
+
+    //UI显示
     Box(
-        modifier = Modifier.zIndex(1f), //使其不会被覆盖
-        contentAlignment = Alignment.TopStart
+        modifier = Modifier
+            .fillMaxSize()
+            .zIndex(1f) //使其不会被覆盖
     ) {
-        Button(
-            onClick = {
-                restartDialog = true
-            }
-        ) {
-            Text(text = "重新开始")
-        }
-    }
-
-    //右下角悔棋按钮
-    Box(
-        modifier = Modifier.zIndex(1f), //使其不会被覆盖
-        contentAlignment = Alignment.BottomEnd
-    ){
-        Button(
-            onClick = {
-                backDialog = true
-            }
-        ){
-            Text(text = "悔棋")
-        }
-    }
-
-    //主棋盘容器
-    Box(modifier = Modifier.fillMaxSize()) {
-
-        //中间上部网络状态显示
+        //堆叠UI
+        //不是本地时
         if (OnlineState.Local != onlineState) {
+            //中间上部网络状态显示
             //让文本框支持向下滚动
             val scrollState1 = rememberScrollState()
             Box(
                 modifier = Modifier
+                    .fillMaxWidth()
                     .verticalScroll(scrollState1)
                     .padding(8.dp, top = 50.dp),
                 contentAlignment = Alignment.TopCenter
             ) {
                 SelectionContainer {
                     Text(tcpConnector!!.connectionStatus, Modifier.padding(8.dp))
+                    //右上部显示聊天信息
+                    if (gameManager.chatMessage.isNotEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp, bottom = 100.dp),
+                            contentAlignment = Alignment.TopEnd
+                        ) {
+                            ChatBubble(gameManager.chatMessage, isFromMe = false) {
+                                gameManager.chatMessage = ""
+                            }
+                        }
+                    }
+                }
+            }
+
+            if(showMyChatBubble.isNotEmpty()){
+                //左下部显示聊天信息
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp, bottom = 50.dp),
+                    contentAlignment = Alignment.BottomStart
+                ) {
+                    ChatBubble(showMyChatBubble, isFromMe = true) {
+                        showMyChatBubble = ""
+                    }
                 }
             }
         }
 
-        // 将状态栏配色设为当前背景配色
-        val view = LocalView.current
-        if (!view.isInEditMode) {
-            SideEffect {
-                val window = (view.context as Activity).window
-                //设置状态栏颜色和背景颜色同步
-                window.statusBarColor = chessBoardColor.toArgb()
-                //设置状态栏图标为深色
-                WindowCompat
-                    .getInsetsController(window, view)
-                    ?.isAppearanceLightStatusBars = true
-            }
-        }
-
-        //背景图片
-        Image(
-            painter = painterResource(R.drawable.bg),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize() // 图片填充整个 Box
-        )
-
-        //象棋游戏主容器
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    // 当前玩家不是玩家1，则垂直对角翻转180度
-                    if (0 != gameManager.localPlayer) {
-                        scaleX = -1f
-                        scaleY = -1f
-                    }
-                },
+        //不堆叠UI
+        Column(
+            modifier = Modifier.fillMaxSize()
         ) {
-
-            //右上角的容器
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.Top, // 垂直方向上靠上对齐
-                horizontalAlignment = Alignment.CenterHorizontally // 水平方向上居中对齐
+            //上部分容器
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                horizontalArrangement = Arrangement.SpaceBetween, // 关键：将子项分到两端
+                verticalAlignment = Alignment.Top
             ) {
+                //左上角重新开始按钮
+                Row(
+                    horizontalArrangement = Arrangement.Start,
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Button(
+                        onClick = {
+                            restartDialog = true
+                        }
+                    ) {
+                        Text(text = "重新开始")
+                    }
+                }
+
+                //右上角显示容器
                 Row(
                     modifier = Modifier
-                        .fillMaxWidth()
                         .graphicsLayer {
                             scaleX = -1f
                             scaleY = -1f
@@ -336,53 +372,34 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
                     horizontalArrangement = Arrangement.Start
                 ) {
                     Text(
-                        "玩家2",
-                        color = Color.Blue,
+                        if (0 == gameManager.localPlayer) "玩家2" else "玩家1",
+                        color = if (0 == gameManager.localPlayer) Color.Blue else Color.Red,
                         fontSize = 40.sp
                     )
                     Text(
                         text = " ${gameManager.alivePieces.groupBy { it.camp }[PieceCamp.Black]?.size ?: 0}"
                                 + if (1 == gameManager.currentPlayer) {
-                            "【到你了】"
+                            "【走】"
                         } else "",
-                        color = Color.Blue,
+                        color = if (0 == gameManager.localPlayer) Color.Blue else Color.Red,
                         fontSize = 30.sp
                     )
                 }
             }
 
-            //左下角的容器
-            Box(
+            //象棋游戏主容器
+            Row(
                 modifier = Modifier
-                    .align(Alignment.BottomStart)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth(),
-                    verticalAlignment = Alignment.Bottom,
-                    horizontalArrangement = Arrangement.Start
-                ) {
-                    Text(
-                        "玩家1",
-                        color = Color.Red,
-                        fontSize = 40.sp,
-                    )
-                    Text(
-                        text = " ${gameManager.alivePieces.groupBy { it.camp }[PieceCamp.Red]?.size ?: 0}"
-                                + if (0 == gameManager.currentPlayer) {
-                            "【到你了】"
-                        } else "",
-                        color = Color.Red,
-                        fontSize = 30.sp
-                    )
-                }
-            }
-
-            // Box用于居中棋盘
-            Box(
-                modifier = Modifier
-                    .fillMaxSize(),
-                contentAlignment = Alignment.Center
+                    //.fillMaxSize()
+                    .graphicsLayer {
+                        // 当前玩家不是玩家1，则垂直对角翻转180度
+                        if (0 != gameManager.localPlayer) {
+                            scaleX = -1f
+                            scaleY = -1f
+                        }
+                    },
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 // 绘制棋盘
                 Canvas(
@@ -424,14 +441,100 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
                     )
                 }
             }
-        }
 
+            //下部分容器
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.SpaceBetween, // 关键：将子项分到两端
+            ) {
+                //左下角的容器
+                Row(
+                    verticalAlignment = Alignment.Bottom,
+                    horizontalArrangement = Arrangement.Start
+                ) {
+                    Text(
+                        if (0 != gameManager.localPlayer) "玩家2" else "玩家1",
+                        color = if (0 != gameManager.localPlayer) Color.Blue else Color.Red,
+                        fontSize = 40.sp,
+                    )
+                    Text(
+                        text = " ${gameManager.alivePieces.groupBy { it.camp }[PieceCamp.Red]?.size ?: 0}"
+                                + if (0 == gameManager.currentPlayer) {
+                            "【走】"
+                        } else "",
+                        color = if (0 != gameManager.localPlayer) Color.Blue else Color.Red,
+                        fontSize = 30.sp
+                    )
+                }
+
+                //右下角悔棋按钮
+                Row(
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    Button(
+                        onClick = {
+                            backDialog = true
+                        }
+                    ) {
+                        Text(text = "悔棋")
+                    }
+                }
+            }
+
+            //不是本地时
+            if (OnlineState.Local != onlineState) {
+                //中间下部发送消息聊天框
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween, // 将子项分到两端
+                    verticalAlignment = Alignment.Bottom
+                ){
+                    TextField(
+                        value = tcpConnector?.messageToSend ?: "",
+                        onValueChange = { tcpConnector?.messageToSend = it },
+                        modifier = Modifier
+                            .padding(4.dp),
+                        label = { Text("Enter Message") }
+                    )
+                    Button(onClick = {
+                        showMyChatBubble = tcpConnector?.messageToSend ?: ""
+                        tcpConnector?.send("chatMessage: ${tcpConnector.messageToSend}", current)
+                    }) {
+                        Text("发送")
+                    }
+                }
+            }
+        }
     }
+
+    // 将状态栏配色设为当前背景配色
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as Activity).window
+            //设置状态栏颜色和背景颜色同步
+            window.statusBarColor = chessBoardColor.toArgb()
+            //设置状态栏图标为深色
+            WindowCompat
+                .getInsetsController(window, view)
+                ?.isAppearanceLightStatusBars = true
+        }
+    }
+
+    //背景图片
+    Image(
+        painter = painterResource(R.drawable.bg),
+        contentDescription = null,
+        contentScale = ContentScale.Crop,
+        modifier = Modifier.fillMaxSize() // 图片填充整个 Box
+    )
 }
 
-
-@Suppress("PreviewAnnotationInFunctionWithParameters")
-@Preview(showBackground = true)
 @Composable
 fun DrawMain(viewModel: GameViewModel) {
     ChessBoard(viewModel)
