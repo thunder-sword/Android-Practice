@@ -132,7 +132,9 @@ class TCPListener: TCPConnector(){
     //重载重连函数
     override fun startReconnect(onReconnectSuccess: (() -> Unit)?) {
         if (reconnectAttempts >= maxReconnectAttempts) {
-            connectionStatus = "Max reconnection attempts reached"
+            connectionStatus = "已达最大重连次数，可手动重新连接"
+            isReconnecting = false
+            reconnectAttempts = 0
             return
         }
 
@@ -184,7 +186,7 @@ class TCPListener: TCPConnector(){
                         connectionStatus = "Reconnection failed: ${e.message}"
                     }
                     delay(reconnectInterval)
-                    startReconnect() // 继续尝试重连
+                    startReconnect(onReconnectSuccess) // 继续尝试重连
                 }
             }
         }

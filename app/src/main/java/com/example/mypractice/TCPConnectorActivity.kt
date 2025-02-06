@@ -75,8 +75,8 @@ open class TCPConnector{
 
     //重连相关变量
     protected var reconnectAttempts = 0
-    protected val maxReconnectAttempts = 100 // 最大重连次数
-    protected val reconnectInterval = 3000L // 重连间隔时间（毫秒）
+    protected val maxReconnectAttempts = 3 // 最大重连次数
+    protected val reconnectInterval = 2000L // 重连间隔时间（毫秒）
     var isReconnecting by mutableStateOf(false)
 
     protected val mutex = Mutex()
@@ -85,10 +85,12 @@ open class TCPConnector{
 
     //作用：发送消息
     fun send(message: String, current: Context){
+        //println("正要发送信息：$message")
         // 发送前检测socket是否处于连接状态
         if (!isConnect || null == socket || socket?.isClosed == true || socket?.isInputShutdown == true || socket?.isOutputShutdown == true) {
             isConnect = false
             Toast.makeText(current, "当前未连接，无法发送", Toast.LENGTH_SHORT).show()
+            println("当前未连接，无法发送消息")
             return
         }
 
@@ -98,19 +100,17 @@ open class TCPConnector{
         }
 
         CoroutineScope(Dispatchers.IO).launch {
-            mutex.withLock {    //加锁确保发送顺序
-                try {
-                    writer?.println(message)
-                    writer?.flush()
-                    withContext(Dispatchers.Main) {
-                        receivedMessages += "\nSent: $message"
-                        //发送信息后清空输入框
-                        messageToSend = ""
-                    }
-                } catch (e: Exception) {
-                    withContext(Dispatchers.Main) {
-                        receivedMessages += "\nFailed to send: ${e.message}"
-                    }
+            try {
+                writer?.println(message)
+                writer?.flush()
+                withContext(Dispatchers.Main) {
+                    receivedMessages += "\nSent: $message"
+                    //发送信息后清空输入框
+                    messageToSend = ""
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    receivedMessages += "\nFailed to send: ${e.message}"
                 }
             }
         }
@@ -188,7 +188,9 @@ open class TCPConnector{
     open fun startReconnect(onReconnectSuccess: (() -> Unit)? = null) {
         println("当前重连次数：$reconnectAttempts")
         if (reconnectAttempts >= maxReconnectAttempts) {
-            connectionStatus = "Max reconnection attempts reached"
+            connectionStatus = "已达最大重连次数，可手动重新连接"
+            isReconnecting = false
+            reconnectAttempts = 0
             return
         }
 
@@ -218,10 +220,10 @@ open class TCPConnector{
                         }
                     } else {
                         delay(reconnectInterval)
-                        startReconnect()
+                        startReconnect(onReconnectSuccess)
                     }
                 } catch (e: Exception) {
-                    startReconnect()
+                    startReconnect(onReconnectSuccess)
                 }
             }
         }

@@ -2,6 +2,7 @@ package com.example.mypractice
 
 import android.app.Activity
 import android.os.Bundle
+import android.view.ViewTreeObserver
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -27,10 +28,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.*
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -283,6 +281,34 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
     //本用户聊天气泡显示字符串
     var showMyChatBubble by remember { mutableStateOf("") }
 
+    val view = LocalView.current
+    // 记录并监听键盘高度
+    var keyboardHeightPx by remember { mutableStateOf(0) } // 以 px 计算
+    val density = LocalDensity.current // 获取屏幕密度
+    // 监听键盘高度变化（兼容 SDK 21+）
+    DisposableEffect(view) {
+        val listener = ViewTreeObserver.OnGlobalLayoutListener {
+            val rect = android.graphics.Rect()
+            view.getWindowVisibleDisplayFrame(rect)
+
+            val heightDiff = view.height - rect.bottom
+
+            keyboardHeightPx = if (heightDiff > view.height * 0.15) { // 15% 以上视为键盘弹出
+                heightDiff
+            } else {
+                0
+            }
+        }
+
+        view.viewTreeObserver.addOnGlobalLayoutListener(listener)
+        onDispose {
+            view.viewTreeObserver.removeOnGlobalLayoutListener(listener)
+        }
+    }
+    // 转换 px -> dp
+    val keyboardHeightDp = with(density) { keyboardHeightPx.toDp() }
+    //println("keyboardHeight: ${keyboardHeight.dp + 85.dp}")
+
     //UI显示
     Box(
         modifier = Modifier
@@ -290,46 +316,58 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
             .zIndex(1f) //使其不会被覆盖
     ) {
         //堆叠UI
-        //不是本地时
-        if (OnlineState.Local != onlineState) {
-            //中间上部网络状态显示
-            //让文本框支持向下滚动
-            val scrollState1 = rememberScrollState()
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(scrollState1)
-                    .padding(8.dp, top = 50.dp),
-                contentAlignment = Alignment.TopCenter
-            ) {
-                SelectionContainer {
-                    Text(tcpConnector!!.connectionStatus, Modifier.padding(8.dp))
-                    //右上部显示聊天信息
-                    if (gameManager.chatMessage.isNotEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(8.dp, bottom = 100.dp),
-                            contentAlignment = Alignment.TopEnd
-                        ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(2f)
+        ) {
+            //不是本地时
+            if (OnlineState.Local != onlineState) {
+                //中间上部网络状态显示
+                //让文本框支持向下滚动
+                val scrollState1 = rememberScrollState()
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(scrollState1)
+                        .padding(8.dp, top = 50.dp),
+                    contentAlignment = Alignment.TopCenter
+                ) {
+                    SelectionContainer {
+                        Text(tcpConnector!!.connectionStatus, Modifier.padding(8.dp))
+                    }
+                }
+
+                //右上部显示聊天信息
+                if (gameManager.chatMessage.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .zIndex(3f)
+                            .padding(8.dp, top = keyboardHeightDp + 85.dp), //加上键盘高度，使调出键盘时也能显示聊天内容
+                        contentAlignment = Alignment.TopEnd
+                    ) {
+                        SelectionContainer {
                             ChatBubble(gameManager.chatMessage, isFromMe = false) {
                                 gameManager.chatMessage = ""
                             }
                         }
                     }
                 }
-            }
 
-            if(showMyChatBubble.isNotEmpty()){
-                //左下部显示聊天信息
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp, bottom = 50.dp),
-                    contentAlignment = Alignment.BottomStart
-                ) {
-                    ChatBubble(showMyChatBubble, isFromMe = true) {
-                        showMyChatBubble = ""
+                if (showMyChatBubble.isNotEmpty()) {
+                    //左下部显示聊天信息
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(8.dp, bottom = 110.dp),
+                        contentAlignment = Alignment.BottomStart
+                    ) {
+                        SelectionContainer {
+                            ChatBubble(showMyChatBubble, isFromMe = true) {
+                                showMyChatBubble = ""
+                            }
+                        }
                     }
                 }
             }
@@ -513,7 +551,6 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
     }
 
     // 将状态栏配色设为当前背景配色
-    val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
