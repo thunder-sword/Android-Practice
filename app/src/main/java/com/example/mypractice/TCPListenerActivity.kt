@@ -134,6 +134,7 @@ class TCPListener: TCPConnector(){
             connectionStatus = "已达最大重连次数，可手动重新连接"
             isReconnecting = false
             reconnectAttempts = 0
+            serverSocket = null
             return
         }
 

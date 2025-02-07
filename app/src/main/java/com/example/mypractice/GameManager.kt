@@ -482,6 +482,7 @@ class GameManager(
 
     //作用：处理接收来的指令
     private fun handleInst(message: String){
+        println("收到消息：$message")
         val (inst, value) = message.split(": ")
         when(inst){
             //如果是移动指令，并且当前并非自己操作，则移动棋子并切换玩家
@@ -520,12 +521,10 @@ class GameManager(
                         onBlockQueryYes = {
                             tryRestartGame(true)
                             sendMessage("isRestart: yes")
-                            blockQueryString = ""
                         }
                         onBlockQueryNo = {
                             Toast.makeText(current, "已拒绝重新开始", Toast.LENGTH_SHORT).show()
                             sendMessage("isRestart: no")
-                            blockQueryString = ""
                         }
                     }
                     "yes" -> {
@@ -550,12 +549,10 @@ class GameManager(
                         onBlockQueryYes = {
                             tryBackStep(true)
                             sendMessage("isBackStep: yes")
-                            blockQueryString = ""
                         }
                         onBlockQueryNo = {
                             Toast.makeText(current, "已拒绝悔棋", Toast.LENGTH_SHORT).show()
                             sendMessage("isBackStep: no")
-                            blockQueryString = ""
                         }
                     }
                     "yes" -> {
@@ -632,13 +629,11 @@ class GameManager(
                                     blockString = ""
                                     Toast.makeText(current, "客户端已回连", Toast.LENGTH_SHORT).show()
                                 }
-                                blockQueryString = ""
                             }
                             onBlockQueryNo = {
                                 Toast.makeText(current, "已结束游戏", Toast.LENGTH_SHORT).show()
                                 endGame()
                                 (current as? Activity)?.finish()
-                                blockQueryString = ""
                             }
                         }
                     }

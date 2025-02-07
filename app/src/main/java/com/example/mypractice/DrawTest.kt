@@ -1,11 +1,15 @@
 package com.example.mypractice
 
+import android.Manifest
 import android.app.Activity
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.view.ViewTreeObserver
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -15,6 +19,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.*
@@ -30,10 +35,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.*
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
+import androidx.core.app.ActivityCompat
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -138,6 +145,8 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
     }
     //语音器
     val audioManager: UDPAudioChat = remember { UDPAudioChat() }
+    //是否显示语音器设置地址Dialog
+    var showAudioSettingDialog by remember { mutableStateOf(false) }
 
     // 开始执行一次
     LaunchedEffect(Unit) {
@@ -146,7 +155,7 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
         //如果不是本地则初始化语音器
         if(OnlineState.Local!=onlineState) {
             audioManager.ip = tcpConnector!!.ip
-            audioManager.port = tcpConnector.port
+            //先默认监听端口为4399
             //连接音频
             audioManager.connect()
             //自动播放远端音频
@@ -185,15 +194,15 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
     // 解构棋盘宽高
     val (chessBoardWidth, chessBoardHeight) = chessBoardSize
 
-    // 重新开始游戏弹窗是否显示
-    var restartDialog by remember { mutableStateOf(false) }
-    // 是否悔棋游戏弹窗是否显示
-    var backDialog by remember { mutableStateOf(false) }
-
     // 监听 gameManager.currentState 的状态变化
     LaunchedEffect(gameManager.currentState) {
         if (gameManager.currentState == GameState.Ended) {
-            restartDialog = true
+            gameManager.blockQueryString = "是否要重新开始游戏？"
+            gameManager.onBlockQueryYes = {
+                gameManager.tryRestartGame()
+            }
+            gameManager.onBlockQueryNo = {
+            }
         }
     }
 
@@ -205,7 +214,7 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
             text = { Text(text = gameManager.blockQueryString) },
             confirmButton = {
                 Button(onClick = {
-                    restartDialog = false
+                    gameManager.blockQueryString = ""
                     gameManager.onBlockQueryYes?.invoke()
                 }) {
                     Text("是")
@@ -214,7 +223,7 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
             dismissButton = {
                 Button(onClick = {
                     // 关闭弹窗
-                    restartDialog = false
+                    gameManager.blockQueryString = ""
                     gameManager.onBlockQueryNo?.invoke()
                 }) {
                     Text("否")
@@ -249,58 +258,6 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
         }
     }
 
-    // 显示重新开始弹窗
-    if (restartDialog) {
-        AlertDialog(
-            onDismissRequest = { /* 不允许点击外部关闭弹窗 */ },
-            title = { Text(text = "确定") },
-            text = { Text(text = "是否要重新开始游戏？") },
-            confirmButton = {
-                Button(onClick = {
-                    gameManager.tryRestartGame()
-                    restartDialog = false
-                }) {
-                    Text("重新开始")
-                }
-            },
-            dismissButton = {
-                Button(onClick = {
-                    // 关闭弹窗
-                    restartDialog = false
-                }) {
-                    Text("取消")
-                }
-            }
-        )
-    }
-
-    // 显示悔棋确定弹窗
-    if (backDialog) {
-        AlertDialog(
-            onDismissRequest = { /* 不允许点击外部关闭弹窗 */ },
-            title = { Text(text = "确定") },
-            text = { Text(text = "是否真的要悔棋？") },
-            confirmButton = {
-                Button(onClick = {
-                    if (!gameManager.tryBackStep()) {
-                        Toast.makeText(current, "不能再悔棋了", Toast.LENGTH_LONG).show()
-                    }
-                    backDialog = false
-                }) {
-                    Text("确定")
-                }
-            },
-            dismissButton = {
-                Button(onClick = {
-                    // 关闭弹窗
-                    backDialog = false
-                }) {
-                    Text("取消")
-                }
-            }
-        )
-    }
-
     //本用户聊天气泡显示字符串
     var showMyChatBubble by remember { mutableStateOf("") }
 
@@ -331,6 +288,105 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
     // 转换 px -> dp
     val keyboardHeightDp = with(density) { keyboardHeightPx.toDp() }
 
+    // 保存是否已经获取了录音和蓝牙权限的状态
+    var hasRecordAndBluetoothPermission by remember { mutableStateOf(
+        ActivityCompat.checkSelfPermission(
+            current,
+            Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED &&
+                // 对于 Android 12 及以上，需要检查 BLUETOOTH_CONNECT 权限，否则默认认为已获得权限
+                (if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S)
+                    ActivityCompat.checkSelfPermission(
+                        current,
+                        Manifest.permission.BLUETOOTH_CONNECT
+                    ) == PackageManager.PERMISSION_GRANTED
+                else true)
+    ) }
+    // 创建一个请求多个权限的 launcher
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val recordGranted = permissions[Manifest.permission.RECORD_AUDIO] ?: false
+        val bluetoothGranted =
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                permissions[Manifest.permission.BLUETOOTH_CONNECT] ?: false
+            } else {
+                true
+            }
+        hasRecordAndBluetoothPermission = recordGranted && bluetoothGranted
+
+        if (hasRecordAndBluetoothPermission) {
+            // 用户同意所有权限后启动录音
+            audioManager.startRecord(current)
+        } else {
+            Toast.makeText(current, "必须授予录音和蓝牙权限才能使用该功能", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    //设置音频地址
+    if (showAudioSettingDialog) {
+        AlertDialog(
+            onDismissRequest = { /* 不允许点击外部关闭弹窗 */ },
+            title = { Text(text = "提示") },
+            text = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(text = "请输入语音服务器地址")
+                        TextField(
+                            value = audioManager.ip,
+                            onValueChange = { audioManager.ip = it },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp),
+                            label = { Text("Enter IP Address") }
+                        )
+
+                        TextField(
+                            value = audioManager.port,
+                            onValueChange = { audioManager.port = it },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp),
+                            keyboardOptions = KeyboardOptions.Default.copy(keyboardType = KeyboardType.Number),
+                            label = { Text("Enter Port") }
+                        )
+                    }
+                },
+            confirmButton = {
+                Button(onClick = {
+                    showAudioSettingDialog = false
+                    // 如果还没有权限，则申请权限
+                    if (!hasRecordAndBluetoothPermission) {
+                        val permissionsToRequest = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                            arrayOf(
+                                Manifest.permission.RECORD_AUDIO,
+                                Manifest.permission.BLUETOOTH_CONNECT
+                            )
+                        } else {
+                            arrayOf(Manifest.permission.RECORD_AUDIO)
+                        }
+                        permissionLauncher.launch(permissionsToRequest)
+                    } else {
+                        // 权限已具备，则直接启动录音
+                        audioManager.startRecord(current)
+                    }
+                }) {
+                    Text("是")
+                }
+            },
+            dismissButton = {
+                Button(onClick = {
+                    // 关闭弹窗
+                    showAudioSettingDialog = false
+                }) {
+                    Text("否")
+                }
+            }
+        )
+    }
+
     //UI显示
     Box(
         modifier = Modifier
@@ -341,7 +397,7 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .zIndex(2f)
+                //.zIndex(2f)
         ) {
             //不是本地时
             if (OnlineState.Local != onlineState) {
@@ -382,6 +438,7 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
+                            .zIndex(3f)
                             .padding(8.dp, bottom = 110.dp),
                         contentAlignment = Alignment.BottomStart
                     ) {
@@ -414,7 +471,12 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
                 ) {
                     Button(
                         onClick = {
-                            restartDialog = true
+                            gameManager.blockQueryString = "是否要重新开始游戏？"
+                            gameManager.onBlockQueryYes = {
+                                gameManager.tryRestartGame()
+                            }
+                            gameManager.onBlockQueryNo = {
+                            }
                         }
                     ) {
                         Text(text = "重新开始")
@@ -533,7 +595,14 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
                 ) {
                     Button(
                         onClick = {
-                            backDialog = true
+                            gameManager.blockQueryString = "是否真的要悔棋？"
+                            gameManager.onBlockQueryYes = {
+                                if (!gameManager.tryBackStep()) {
+                                    Toast.makeText(current, "不能再悔棋了", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                            gameManager.onBlockQueryNo = {
+                            }
                         }
                     ) {
                         Text(text = "悔棋")
@@ -550,17 +619,16 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.Bottom
                 ){
-                    //请求录音权限
-                    QueryAudioPermissions()
-                    //打开语音按钮
-                    VoiceChatButton(isTalking = audioManager.isRecording,
-                            onStart = {
-                                audioManager.startRecord(current)
-                            },
-                            onStop = {
-                                audioManager.stopRecord()
-                            }
-                        )
+                    // 语音聊天按钮
+                    VoiceChatButton(
+                        isTalking = audioManager.isRecording,
+                        onStart = {
+                            showAudioSettingDialog = true
+                        },
+                        onStop = {
+                            audioManager.stopRecord()
+                        }
+                    )
                     //信息输入框
                     TextField(
                         value = tcpConnector?.messageToSend ?: "",

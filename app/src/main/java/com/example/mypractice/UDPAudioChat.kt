@@ -21,6 +21,7 @@ class UDPAudioChat(
     // 网络配置（在使用前请先调用 connect() 建立 UDP Socket）
     var ip by mutableStateOf("")
     var port by mutableStateOf("4399")
+    var listenPort by mutableStateOf("4399")
 
     // 状态参数
     var isRecording by mutableStateOf(false)
@@ -45,7 +46,7 @@ class UDPAudioChat(
      * 播放时也可以从网络接收数据。
      */
     fun connect() {
-        val portNumber = port.toIntOrNull()!!
+        val portNumber = listenPort.toIntOrNull()!!
         try {
             // 初始化发送端（系统会随机分配本地端口）
             sendSocket = DatagramSocket()
@@ -62,7 +63,6 @@ class UDPAudioChat(
      * 录音过程中每采集一段数据就调用 sendAudioData() 将数据发送出去
      */
     fun startRecord(context: Context) {
-
         // 检查录音权限
         if (ActivityCompat.checkSelfPermission(
                 context,
@@ -216,11 +216,47 @@ class UDPAudioChat(
         println("接收到音频数据，长度: $length")
         // 这里可以将数据放入缓冲队列，或直接返回给播放线程
     }
+
+    fun onDestroy() {
+        // 停止录音
+        isRecording = false
+        audioRecord?.let { record ->
+            try {
+                record.stop()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            record.release()
+        }
+        audioRecord = null
+
+        // 停止播放
+        isPlaying = false
+        audioTrack?.let { track ->
+            try {
+                track.stop()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            track.release()
+        }
+        audioTrack = null
+
+        // 关闭 UDP Socket
+        sendSocket?.close()
+        sendSocket = null
+
+        receiveSocket?.close()
+        receiveSocket = null
+
+        // 如果有后台协程，也需要取消（假设你有一个scope）
+        // scope.cancel()
+    }
 }
 
 /**
  * 请求录音和网络权限的 Composable
- * 使用 ActivityResult API 请求 RECORD_AUDIO 和 INTERNET 权限
+ * 使用 ActivityResult API 请求 RECORD_AUDIO 和 BLUETOOTH 权限
  */
 @Composable
 fun QueryAudioPermissions() {
@@ -241,7 +277,7 @@ fun QueryAudioPermissions() {
         requestPermissions.launch(
             arrayOf(
                 Manifest.permission.RECORD_AUDIO,
-                Manifest.permission.INTERNET
+                Manifest.permission.BLUETOOTH
             )
         )
     }
