@@ -50,7 +50,6 @@ class TCPListenerActivity : ComponentActivity() {
 class TCPListener: TCPConnector(){
     internal var serverSocket: ServerSocket? = null
     var serverAddresses by mutableStateOf("")
-    var clientAddress by mutableStateOf("")
 
     //获取本机全部ip，同时获取ipv4和ipv6（过滤了链路地址），ipv6用中括号[]包裹
     private fun getLocalIPAddresses(): List<String> {
@@ -89,11 +88,11 @@ class TCPListener: TCPConnector(){
 
                 isConnect = true
 
-                clientAddress =
-                    "${socket?.inetAddress?.hostAddress}:${socket?.port}"
+                ip = socket?.inetAddress?.hostAddress ?: ""
+                port = socket?.port.toString()
 
                 withContext(Dispatchers.Main) {
-                    connectionStatus = "Client connected from $clientAddress"
+                    connectionStatus = "Client connected from $ip:$port"
                     onConnectSuccess?.invoke() //回调函数调用
                 }
 
@@ -169,10 +168,11 @@ class TCPListener: TCPConnector(){
                     isReconnecting = false
                     reconnectAttempts = 0
 
-                    clientAddress = "${socket?.inetAddress?.hostAddress}:${socket?.port}"
+                    ip = socket?.inetAddress?.hostAddress ?: ""
+                    port = socket?.port.toString()
 
                     withContext(Dispatchers.Main) {
-                        connectionStatus = "Client reconnected from $clientAddress"
+                        connectionStatus = "Client reconnected from $ip:$port"
                         onReconnectSuccess?.invoke() // 调用回调
                     }
 

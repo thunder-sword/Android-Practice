@@ -1,7 +1,7 @@
 package com.example.mypractice
 
 import android.Manifest
-import android.annotation.SuppressLint
+import android.content.Context
 import android.content.pm.PackageManager
 import android.media.*
 import android.widget.Toast
@@ -61,10 +61,7 @@ class UDPAudioChat(
      * 开始本地录音（需要在 Compose 中调用以获取 LocalContext）
      * 录音过程中每采集一段数据就调用 sendAudioData() 将数据发送出去
      */
-    @SuppressLint("CoroutineCreationDuringComposition")
-    @Composable
-    fun startRecord() {
-        val context = LocalContext.current
+    fun startRecord(context: Context) {
 
         // 检查录音权限
         if (ActivityCompat.checkSelfPermission(
@@ -72,15 +69,8 @@ class UDPAudioChat(
                 Manifest.permission.RECORD_AUDIO
             ) != PackageManager.PERMISSION_GRANTED
         ) {
-            queryAudioPermissions()
-            if (ActivityCompat.checkSelfPermission(
-                    context,
-                    Manifest.permission.RECORD_AUDIO
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                Toast.makeText(context, "无法获取录音权限", Toast.LENGTH_LONG).show()
-                return
-            }
+            Toast.makeText(context, "无法获取录音权限", Toast.LENGTH_LONG).show()
+            return
         }
 
         // 初始化 AudioRecord
@@ -233,7 +223,7 @@ class UDPAudioChat(
  * 使用 ActivityResult API 请求 RECORD_AUDIO 和 INTERNET 权限
  */
 @Composable
-fun queryAudioPermissions() {
+fun QueryAudioPermissions() {
     val context = LocalContext.current
     val requestPermissions = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()

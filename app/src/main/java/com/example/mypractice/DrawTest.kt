@@ -117,7 +117,7 @@ fun VoiceChatButton(
     Button(
         onClick = { if (isTalking) onStop() else onStart() }
     ) {
-        Text(if (isTalking) "结束语音" else "开始语音")
+        Text(if (isTalking) "关" else "开")
     }
 }
 
@@ -136,11 +136,22 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
             tcpConnector = tcpConnector
         )
     }
+    //语音器
+    val audioManager: UDPAudioChat = remember { UDPAudioChat() }
 
-    // 确保游戏启动只在开始执行一次
+    // 开始执行一次
     LaunchedEffect(Unit) {
         //启动游戏
         gameManager.startGame()
+        //如果不是本地则初始化语音器
+        if(OnlineState.Local!=onlineState) {
+            audioManager.ip = tcpConnector!!.ip
+            audioManager.port = tcpConnector.port
+            //连接音频
+            audioManager.connect()
+            //自动播放远端音频
+            audioManager.startAudioPlay()
+        }
     }
 
     // 监听生命周期，在 onDestroy 时清理
@@ -319,7 +330,6 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
     }
     // 转换 px -> dp
     val keyboardHeightDp = with(density) { keyboardHeightPx.toDp() }
-    //println("keyboardHeight: ${keyboardHeight.dp + 85.dp}")
 
     //UI显示
     Box(
@@ -540,8 +550,17 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.Bottom
                 ){
+                    //请求录音权限
+                    QueryAudioPermissions()
                     //打开语音按钮
-                    //VoiceChatButton(isTalking = true, )
+                    VoiceChatButton(isTalking = audioManager.isRecording,
+                            onStart = {
+                                audioManager.startRecord(current)
+                            },
+                            onStop = {
+                                audioManager.stopRecord()
+                            }
+                        )
                     //信息输入框
                     TextField(
                         value = tcpConnector?.messageToSend ?: "",
