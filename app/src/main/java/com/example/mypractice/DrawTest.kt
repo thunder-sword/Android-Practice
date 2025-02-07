@@ -108,6 +108,18 @@ fun ChatBubble(
     }
 }
 
+@Composable
+fun VoiceChatButton(
+    isTalking: Boolean,
+    onStart: () -> Unit,
+    onStop: () -> Unit
+) {
+    Button(
+        onClick = { if (isTalking) onStop() else onStart() }
+    ) {
+        Text(if (isTalking) "结束语音" else "开始语音")
+    }
+}
 
 //画棋盘
 @Composable
@@ -415,10 +427,8 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
                         fontSize = 40.sp
                     )
                     Text(
-                        text = " ${gameManager.alivePieces.groupBy { it.camp }[PieceCamp.Black]?.size ?: 0}"
-                                + if (1 == gameManager.currentPlayer) {
-                            "【走】"
-                        } else "",
+                        text = " ${gameManager.alivePieces.groupBy { it.camp }[gameManager.players[(gameManager.localPlayer+1) % gameManager.players.size]]?.size ?: 0}"
+                                + if (gameManager.localPlayer != gameManager.currentPlayer) "【走】" else "",
                         color = if (0 == gameManager.localPlayer) Color.Blue else Color.Red,
                         fontSize = 30.sp
                     )
@@ -499,10 +509,8 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
                         fontSize = 40.sp,
                     )
                     Text(
-                        text = " ${gameManager.alivePieces.groupBy { it.camp }[PieceCamp.Red]?.size ?: 0}"
-                                + if (0 == gameManager.currentPlayer) {
-                            "【走】"
-                        } else "",
+                        text = " ${gameManager.alivePieces.groupBy { it.camp }[gameManager.players[gameManager.localPlayer]]?.size ?: 0}"
+                                + if (gameManager.localPlayer == gameManager.currentPlayer) "【走】" else "",
                         color = if (0 != gameManager.localPlayer) Color.Blue else Color.Red,
                         fontSize = 30.sp
                     )
@@ -529,15 +537,20 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
                 Row(
                     modifier = Modifier
                         .fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween, // 将子项分到两端
+                    horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.Bottom
                 ){
+                    //打开语音按钮
+                    //VoiceChatButton(isTalking = true, )
+                    //信息输入框
                     TextField(
                         value = tcpConnector?.messageToSend ?: "",
                         onValueChange = { tcpConnector?.messageToSend = it },
                         modifier = Modifier
+                            .weight(1f)  // 分配剩余空间
                             .padding(4.dp),
-                        label = { Text("Enter Message") }
+                        label = { Text("Enter Message") },
+                        singleLine = false  // 允许内容换行
                     )
                     Button(onClick = {
                         showMyChatBubble = tcpConnector?.messageToSend ?: ""

@@ -80,7 +80,7 @@ class GameManager(
         private set
 
     // 玩家序列，直接用阵营表示
-    private val players: Array<PieceCamp> = PieceCamp.values()
+    val players: Array<PieceCamp> = PieceCamp.values()
     // 当前行动玩家
     var currentPlayer by mutableStateOf(0)
     // 本地玩家下标（联机状态下时本机玩家的阵营下标）
