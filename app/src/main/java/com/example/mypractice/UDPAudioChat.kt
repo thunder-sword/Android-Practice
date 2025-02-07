@@ -4,11 +4,11 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.media.*
+import android.media.audiofx.AcousticEchoCanceler
+import android.media.audiofx.AutomaticGainControl
+import android.media.audiofx.NoiseSuppressor
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
-import androidx.compose.ui.platform.LocalContext
 import androidx.core.app.ActivityCompat
 import kotlinx.coroutines.*
 import java.net.DatagramPacket
@@ -81,6 +81,31 @@ class UDPAudioChat(
             audioFormat,
             bufferSize
         )
+
+        // 检查设备是否支持回音消除
+        if (AcousticEchoCanceler.isAvailable()) {
+            val echoCanceler = AcousticEchoCanceler.create(audioRecord!!.audioSessionId)
+            echoCanceler?.enabled = true
+            if (echoCanceler != null && echoCanceler.enabled) {
+                println("AcousticEchoCanceler 启用成功")
+            } else {
+                println("AcousticEchoCanceler 启用失败")
+            }
+        } else {
+            println("该设备不支持 AcousticEchoCanceler")
+        }
+
+        // 可选：启用噪声抑制
+        if (NoiseSuppressor.isAvailable()) {
+            val noiseSuppressor = NoiseSuppressor.create(audioRecord!!.audioSessionId)
+            noiseSuppressor?.enabled = true
+        }
+
+        // 可选：启用自动增益控制
+        if (AutomaticGainControl.isAvailable()) {
+            val agc = AutomaticGainControl.create(audioRecord!!.audioSessionId)
+            agc?.enabled = true
+        }
 
         audioRecord?.startRecording()
         isRecording = true
@@ -172,7 +197,7 @@ class UDPAudioChat(
             val address = InetAddress.getByName(ip)
             val packet = DatagramPacket(data, data.size, address, portNumber)
             sendSocket?.send(packet)
-            println("发送音频数据，大小: ${data.size}")
+            //println("发送音频数据，大小: ${data.size}")
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -213,7 +238,7 @@ class UDPAudioChat(
      */
     private fun handleReceivedData(data: ByteArray, length: Int) {
         // TODO：如果发送端对录音数据进行了编码，则在此处对数据进行解码
-        println("接收到音频数据，长度: $length")
+        //println("接收到音频数据，长度: $length")
         // 这里可以将数据放入缓冲队列，或直接返回给播放线程
     }
 
@@ -251,34 +276,5 @@ class UDPAudioChat(
 
         // 如果有后台协程，也需要取消（假设你有一个scope）
         // scope.cancel()
-    }
-}
-
-/**
- * 请求录音和网络权限的 Composable
- * 使用 ActivityResult API 请求 RECORD_AUDIO 和 BLUETOOTH 权限
- */
-@Composable
-fun QueryAudioPermissions() {
-    val context = LocalContext.current
-    val requestPermissions = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        // 遍历权限结果，若有权限被拒绝则进行提示
-        permissions.forEach { (permission, granted) ->
-            if (!granted) {
-                Toast.makeText(context, "权限 $permission 被拒绝", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    // 使用 LaunchedEffect 在首次组合时启动权限请求
-    LaunchedEffect(Unit) {
-        requestPermissions.launch(
-            arrayOf(
-                Manifest.permission.RECORD_AUDIO,
-                Manifest.permission.BLUETOOTH
-            )
-        )
     }
 }

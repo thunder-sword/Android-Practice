@@ -25,6 +25,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
@@ -32,6 +33,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.*
 import androidx.compose.ui.res.painterResource
@@ -129,6 +131,7 @@ fun VoiceChatButton(
 }
 
 //画棋盘
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.Local, tcpConnector: TCPConnector? = null) {
     val current = LocalContext.current
@@ -169,6 +172,8 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_DESTROY) {
                 gameManager.onDestroy()
+                tcpConnector?.onDestroy()
+                audioManager.onDestroy()
             }
         }
 
@@ -397,7 +402,8 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                //.zIndex(2f)
+                .zIndex(2f)
+                .pointerInteropFilter { false } // 返回 false 表示该层不消费事件，点击事件可以往下传
         ) {
             //不是本地时
             if (OnlineState.Local != onlineState) {
@@ -421,7 +427,6 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .zIndex(3f)
                             .padding(8.dp, top = keyboardHeightDp + 85.dp), //加上键盘高度，使调出键盘时也能显示聊天内容
                         contentAlignment = Alignment.TopEnd
                     ) {
@@ -438,7 +443,6 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .zIndex(3f)
                             .padding(8.dp, bottom = 110.dp),
                         contentAlignment = Alignment.BottomStart
                     ) {

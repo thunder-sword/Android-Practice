@@ -483,7 +483,13 @@ class GameManager(
     //作用：处理接收来的指令
     private fun handleInst(message: String){
         println("收到消息：$message")
-        val (inst, value) = message.split(": ")
+        val parts = message.split(": ", limit = 2)
+        if (parts.size < 2) {
+            println("无法解析信息：$message")
+            return
+        }
+        val (inst, value) = parts
+
         when(inst){
             //如果是移动指令，并且当前并非自己操作，则移动棋子并切换玩家
             "moveChess" -> {
@@ -772,10 +778,10 @@ class GameManager(
 
                 //如果合适则自动生成随机棋局
                 generateInitialBoard()
-            }
 
-            //随机选择先手玩家
-            currentPlayer = players.indices.random()
+                //随机选择先手玩家
+                currentPlayer = players.indices.random()
+            }
 
             println("chessBoard: ${serializeChessBoard(currentBoard)}")
             println("currentPlayer: $currentPlayer")
@@ -795,13 +801,6 @@ class GameManager(
                 sendMessage("query: chessBoard")
                 //请求当前玩家
                 sendMessage("query: currentPlayer")
-            }
-            //如果是服务器
-            else if (OnlineState.Server == onlineState){
-//                //发送棋局
-//                sendMessage("chessBoard: ${serializeChessBoard(currentBoard)}")
-//                //发送先手玩家
-//                sendMessage("currentPlayer: $currentPlayer")
             }
         } else {
             println("Game is already running.")
@@ -841,6 +840,7 @@ class GameManager(
     //作用：回收
     fun onDestroy(){
         tcpConnector?.onDestroy()
+        scope.cancel()
     }
 }
 
