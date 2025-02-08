@@ -51,31 +51,15 @@ class TCPListener: TCPConnector(){
     internal var serverSocket: ServerSocket? = null
     var serverAddresses by mutableStateOf("")
 
-    //获取本机全部ip，同时获取ipv4和ipv6（过滤了链路地址），ipv6用中括号[]包裹
-    private fun getLocalIPAddresses(): List<String> {
-        return NetworkInterface.getNetworkInterfaces().toList()
-            .flatMap { it.inetAddresses.toList() }
-            .filter {
-                !it.isLoopbackAddress &&
-                        !(it is Inet6Address && it.isLinkLocalAddress)
-            }
-            .map { if(it is Inet6Address)
-                "[${it.hostAddress}]"
-            else it.hostAddress}
-    }
-
     //重载连接函数
     override fun connect(onConnectSuccess: (() -> Unit)?): Boolean {
-        val portNumber = port.toIntOrNull()
-        if (portNumber == null) {
-            return false
-        }
+        val portNumber = port.toIntOrNull() ?: return false
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 serverSocket = ServerSocket(portNumber)
                 serverAddresses =
-                    getLocalIPAddresses().map { "$it:$portNumber" }.joinToString("\n")
+                    getLocalIPAddresses().joinToString("\n") { "$it:$portNumber" }
 
                 withContext(Dispatchers.Main) {
                     connectionStatus = "Server running on\n$serverAddresses"
@@ -200,6 +184,19 @@ class TCPListener: TCPConnector(){
         socket?.close()
         serverSocket?.close()
     }
+}
+
+//获取本机全部ip，同时获取ipv4和ipv6（过滤了链路地址），ipv6用中括号[]包裹
+fun getLocalIPAddresses(): List<String> {
+    return NetworkInterface.getNetworkInterfaces().toList()
+        .flatMap { it.inetAddresses.toList() }
+        .filter {
+            !it.isLoopbackAddress &&
+                    !(it is Inet6Address && it.isLinkLocalAddress)
+        }
+        .map { if(it is Inet6Address)
+            "[${it.hostAddress}]"
+        else it.hostAddress}
 }
 
 @Composable
