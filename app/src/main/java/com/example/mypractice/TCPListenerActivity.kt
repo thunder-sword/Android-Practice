@@ -50,6 +50,7 @@ class TCPListenerActivity : ComponentActivity() {
 class TCPListener: TCPConnector(){
     internal var serverSocket: ServerSocket? = null
     var serverAddresses by mutableStateOf("")
+    var clientAddresses by mutableStateOf("")
 
     //重载连接函数
     override fun connect(onConnectSuccess: (() -> Unit)?): Boolean {
@@ -72,11 +73,10 @@ class TCPListener: TCPConnector(){
 
                 isConnect = true
 
-                ip = socket?.inetAddress?.hostAddress ?: ""
-                port = socket?.port.toString()
+                clientAddresses = "${socket?.inetAddress?.hostAddress}:${socket?.port}"
 
                 withContext(Dispatchers.Main) {
-                    connectionStatus = "Client connected from $ip:$port"
+                    connectionStatus = "Client connected from $clientAddresses"
                     onConnectSuccess?.invoke() //回调函数调用
                 }
 
@@ -153,11 +153,10 @@ class TCPListener: TCPConnector(){
                     isReconnecting = false
                     reconnectAttempts = 0
 
-                    ip = socket?.inetAddress?.hostAddress ?: ""
-                    port = socket?.port.toString()
+                    clientAddresses = "${socket?.inetAddress?.hostAddress}:${socket?.port}"
 
                     withContext(Dispatchers.Main) {
-                        connectionStatus = "Client reconnected from $ip:$port"
+                        connectionStatus = "Client reconnected from $clientAddresses"
                         onReconnectSuccess?.invoke() // 调用回调
                     }
 

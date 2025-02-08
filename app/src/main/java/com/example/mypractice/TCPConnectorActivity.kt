@@ -66,7 +66,7 @@ open class TCPConnector{
     protected var writer: PrintWriter? = null
     protected var reader: BufferedReader? = null
     var isConnect by mutableStateOf(false)
-    var ip by mutableStateOf("")
+    var ip by mutableStateOf("192.168.2.18")
     var port by mutableStateOf("4399")
     var connectionStatus by mutableStateOf("Not Connected")
     var messageToSend by mutableStateOf("")

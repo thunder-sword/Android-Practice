@@ -8,13 +8,10 @@ import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.AutomaticGainControl
 import android.media.audiofx.NoiseSuppressor
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -28,26 +25,15 @@ import androidx.compose.material.TextField
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import kotlinx.coroutines.*
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import java.io.BufferedReader
 import java.io.InputStream
-import java.io.InputStreamReader
-import java.io.PrintWriter
-import java.net.DatagramPacket
-import java.net.DatagramSocket
-import java.net.InetAddress
-import java.net.ServerSocket
-import java.net.Socket
-import java.nio.CharBuffer
+import java.io.OutputStream
+import java.net.*
 
-class UDPAudioChat(
+class AudioChatManager(
     val sampleRate: Int = 16000 // 采样率（Hz）
 ) {
     //使用TCP还是UDP
@@ -64,18 +50,20 @@ class UDPAudioChat(
     var isConnect by mutableStateOf(false)
     //TCP读写对象
     private var socket: Socket? = null
-    private var writer: PrintWriter? = null
+    private var writer: OutputStream? = null
     private var reader: InputStream? = null
 
     // 网络配置（在使用前请先调用 connect() 建立 UDP Socket）
     var ip by mutableStateOf("")
     var port by mutableStateOf("4400")
     var listenPort by mutableStateOf("4400")
+    var clientAddresses by mutableStateOf("")
 
     // 状态参数
     var isRecording by mutableStateOf(false)
     var isPlaying by mutableStateOf(false)
     var isTryRecording by mutableStateOf(false)
+    var isUDPConnect by mutableStateOf(false)
 
     // 配置音频参数
     private val channelConfig = AudioFormat.CHANNEL_IN_MONO
@@ -95,48 +83,11 @@ class UDPAudioChat(
     private val maxReconnectAttempts = 3 // 最大重连次数
     private val reconnectInterval = 2000L // 重连间隔时间（毫秒）
     var isReconnecting by mutableStateOf(false)
-    private val mutex = Mutex()
 
 
-    @Preview(showBackground = true)
+    //@Preview(showBackground = true)
     @Composable
     fun Panel(){
-        val current = LocalContext.current
-        // 保存是否已经获取了录音和蓝牙权限的状态
-        var hasRecordAndBluetoothPermission by remember { mutableStateOf(
-            ActivityCompat.checkSelfPermission(
-                current,
-                Manifest.permission.RECORD_AUDIO
-            ) == PackageManager.PERMISSION_GRANTED &&
-                    // 对于 Android 12 及以上，需要检查 BLUETOOTH_CONNECT 权限，否则默认认为已获得权限
-                    (if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S)
-                        ActivityCompat.checkSelfPermission(
-                            current,
-                            Manifest.permission.BLUETOOTH_CONNECT
-                        ) == PackageManager.PERMISSION_GRANTED
-                    else true)
-        ) }
-        // 创建一个请求多个权限的 launcher
-        val permissionLauncher = rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.RequestMultiplePermissions()
-        ) { permissions ->
-            val recordGranted = permissions[Manifest.permission.RECORD_AUDIO] ?: false
-            val bluetoothGranted =
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                    permissions[Manifest.permission.BLUETOOTH_CONNECT] ?: false
-                } else {
-                    true
-                }
-            hasRecordAndBluetoothPermission = recordGranted && bluetoothGranted
-
-            if (hasRecordAndBluetoothPermission) {
-                // 用户同意所有权限后启动录音
-                startRecord(current)
-            } else {
-                Toast.makeText(current, "必须授予录音和蓝牙权限才能使用该功能", Toast.LENGTH_SHORT).show()
-            }
-        }
-
         Column(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -161,17 +112,51 @@ class UDPAudioChat(
                     .verticalScroll(scrollState1),
                 contentAlignment = Alignment.TopCenter
             ) {
-                //UDP是非连接式网络通信，给出提示
-                if(!isTCP){
-                    Text("UDP不需要连接")
-                }else {
-                    SelectionContainer {
-                        Text(connectionStatus, Modifier.padding(8.dp))
+                SelectionContainer {
+                    Text(connectionStatus, Modifier.padding(8.dp))
+                }
+            }
+
+            //UDP和TCP Server需要监听
+            if((isTCP && isServer) || !isTCP){
+                Text(text = "请输入语音服务器监听端口")
+                TextField(
+                    value = listenPort,
+                    onValueChange = { listenPort = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    keyboardOptions = KeyboardOptions.Default.copy(keyboardType = KeyboardType.Number),
+                    label = { Text("Enter Port") }
+                )
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically  // 设置垂直居中对齐
+                ) {
+                    Button(
+                        modifier = Modifier.padding(4.dp),
+                        onClick = {
+                            listen(isTCP)
+                        }) {
+                        Text("监听")
+                    }
+                    Button(
+                        modifier = Modifier.padding(4.dp),
+                        onClick = {
+                            if(isTCP) {
+                                stopListen()
+                            }else{
+                                isUDPConnect = false
+                                sendSocket?.close()
+                                sendSocket = null
+                            }
+                        }) {
+                        Text("停止监听")
                     }
                 }
             }
 
-            //如果是UDP或者不是TCP服务器才需要输入地址
+            //如果是UDP或者不是TCP服务器需要输入连接地址
             if (!isTCP || !isServer) {
                 Text(text = "请输入语音服务器地址")
                 TextField(
@@ -213,44 +198,12 @@ class UDPAudioChat(
                 }
 
             }
-            //否则只监听即可
-            else if(isTCP && isServer){
-                Text(text = "请输入语音服务器监听端口")
-                TextField(
-                    value = listenPort,
-                    onValueChange = { listenPort = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
-                    keyboardOptions = KeyboardOptions.Default.copy(keyboardType = KeyboardType.Number),
-                    label = { Text("Enter Port") }
-                )
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically  // 设置垂直居中对齐
-                ) {
-                    Button(
-                        modifier = Modifier.padding(8.dp),
-                        onClick = {
-                        listen()
-                    }) {
-                        Text("监听")
-                    }
-                    Button(
-                        modifier = Modifier.padding(8.dp),
-                        onClick = {
-                        stopListen()
-                    }) {
-                        Text("停止监听")
-                    }
-                }
-            }
 
             Row(
                 verticalAlignment = Alignment.CenterVertically  // 设置垂直居中对齐
             ) {
                 Switch(
-                    checked = isTryRecording,
+                    checked = isTryRecording || isRecording,
                     onCheckedChange = {
                         isTryRecording = it // 当状态改变时会自动更新
                     }
@@ -260,41 +213,44 @@ class UDPAudioChat(
         }
     }
 
-    //作用：请求
-
     //作用：监听端口
-    fun listen(){
+    fun listen(tcp: Boolean){
         val portNumber = listenPort.toIntOrNull() ?: return
 
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                serverSocket = ServerSocket(portNumber, 1)    //设置监听队列大小为1
-                serverAddresses = getLocalIPAddresses().joinToString("\n") { "$it:$portNumber" }
+        if(!tcp){ //UDP
+            // 初始化接收端：绑定到指定端口
+            receiveSocket = DatagramSocket(portNumber)
+            isUDPConnect = true
+        }else { //TCP
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    serverSocket = ServerSocket(portNumber, 0)    //设置监听队列大小为0
+                    serverAddresses = getLocalIPAddresses().joinToString("\n") { "$it:$portNumber" }
 
-                withContext(Dispatchers.Main) {
-                    connectionStatus = "Server running on\n$serverAddresses"
-                }
+                    withContext(Dispatchers.Main) {
+                        connectionStatus = "Server running on\n$serverAddresses"
+                    }
 
-                isListen = true
+                    isListen = true
 
-                socket = serverSocket!!.accept()
-                writer = PrintWriter(socket!!.getOutputStream(), true)
-                reader = socket!!.getInputStream()
+                    socket = serverSocket!!.accept()
+                    writer = socket!!.getOutputStream()
+                    reader = socket!!.getInputStream()
 
-                isListen = false
-
-                ip = socket?.inetAddress?.hostAddress ?: ""
-                port = socket?.port.toString()
-
-                withContext(Dispatchers.Main) {
-                    isConnect = true
-                    connectionStatus = "Client connected from $ip:$port"
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    isConnect = false
                     isListen = false
-                    connectionStatus = "Error: ${e.message}"
+
+                    clientAddresses = "${socket?.inetAddress?.hostAddress}:${socket?.port}"
+
+                    withContext(Dispatchers.Main) {
+                        isConnect = true
+                        connectionStatus = "Client connected from $clientAddresses"
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        isConnect = false
+                        isListen = false
+                        connectionStatus = "Error: ${e.message}"
+                    }
                 }
             }
         }
@@ -302,13 +258,15 @@ class UDPAudioChat(
 
     //作用：停止监听端口
     fun stopListen(){
+        isRecording = false //关闭录音
         isConnect = false
         isListen = false
         reader?.close()
         writer?.close()
         socket?.close()
         serverSocket?.close()
-        connectionStatus = "已关闭监听"
+        receiveSocket?.close()
+        connectionStatus = "have close listening."
     }
 
     //作用：重试连接
@@ -318,9 +276,10 @@ class UDPAudioChat(
             println("UDP不需要重连")
             return
         }
+        connectionStatus = "attempt at $reconnectAttempts"
         println("当前重连次数：$reconnectAttempts")
         if (reconnectAttempts >= maxReconnectAttempts) {
-            connectionStatus = "已达最大重连次数，可手动重新连接"
+            connectionStatus = "已超过最大重连次数，可以手动连接"
             isReconnecting = false
             reconnectAttempts = 0
             return
@@ -332,63 +291,58 @@ class UDPAudioChat(
         //TCP客户端
         if(!isServer) {
             CoroutineScope(Dispatchers.IO).launch {
-                mutex.withLock {
-                    try {
+                try {
+                    withContext(Dispatchers.Main) {
+                        connectionStatus = "Reconnecting... Attempt $reconnectAttempts"
+                    }
+
+                    if (connect()) {
+                        isConnect = true
+                        isReconnecting = false
+                        reconnectAttempts = 0
+
                         withContext(Dispatchers.Main) {
-                            connectionStatus = "Reconnecting... Attempt $reconnectAttempts"
+                            connectionStatus = "Reconnected to ${ip}:${port}"
+                            onReconnectSuccess?.invoke() // 调用回调
                         }
-
-                        if (connect()) {
-                            isConnect = true
-                            isReconnecting = false
-                            reconnectAttempts = 0
-
-                            withContext(Dispatchers.Main) {
-                                connectionStatus = "Reconnected to ${ip}:${port}"
-                                onReconnectSuccess?.invoke() // 调用回调
-                            }
-                        } else {
-                            delay(reconnectInterval)
-                            startReconnect(onReconnectSuccess)
-                        }
-                    } catch (e: Exception) {
+                    } else {
+                        delay(reconnectInterval)
                         startReconnect(onReconnectSuccess)
                     }
+                } catch (e: Exception) {
+                    startReconnect(onReconnectSuccess)
                 }
             }
         }else{//TCP服务端
             CoroutineScope(Dispatchers.IO).launch {
-                mutex.withLock {
-                    try {
+                try {
+                    withContext(Dispatchers.Main) {
+                        connectionStatus = "Server running on\n$serverAddresses"
+                    }
+
+                    if (!isConnect) {
+                        isListen = true
+
+                        socket = serverSocket!!.accept()
+                        writer = socket!!.getOutputStream()
+                        reader = socket!!.getInputStream()
+
+                        isListen = false
+
+                        clientAddresses = "${socket?.inetAddress?.hostAddress}:${socket?.port}"
+
                         withContext(Dispatchers.Main) {
-                            connectionStatus = "Server running on\n$serverAddresses"
+                            isConnect = true
+                            connectionStatus = "Client reconnected from $clientAddresses"
+                            onReconnectSuccess?.invoke() // 调用回调
                         }
 
-                        if (!isConnect) {
-                            isListen = true
-
-                            socket = serverSocket!!.accept()
-                            writer = PrintWriter(socket!!.getOutputStream(), true)
-                            reader = socket!!.getInputStream()
-
-                            isListen = false
-
-                            ip = socket?.inetAddress?.hostAddress ?: ""
-                            port = socket?.port.toString()
-
-                            withContext(Dispatchers.Main) {
-                                isConnect = true
-                                connectionStatus = "Client reconnected from $ip:$port"
-                                onReconnectSuccess?.invoke() // 调用回调
-                            }
-
-                        } else {
-                            delay(reconnectInterval)
-                            startReconnect(onReconnectSuccess)
-                        }
-                    } catch (e: Exception) {
+                    } else {
+                        delay(reconnectInterval)
                         startReconnect(onReconnectSuccess)
                     }
+                } catch (e: Exception) {
+                    startReconnect(onReconnectSuccess)
                 }
             }
         }
@@ -401,19 +355,34 @@ class UDPAudioChat(
      */
     fun connect(): Boolean {
         val portNumber = listenPort.toIntOrNull()!!
+        println("正在尝试连接$ip:$portNumber，是否TCP：$isTCP")
         try {
             if(!isTCP) {//UDP
                 // 初始化发送端（系统会随机分配本地端口）
                 sendSocket = DatagramSocket()
-                // 初始化接收端：绑定到指定端口
-                receiveSocket = DatagramSocket(portNumber)
+                connectionStatus = "UDP has connected"
                 println("UDP Socket 已初始化：发送端 ${sendSocket?.localPort}，接收端绑定在端口 $portNumber")
             }
             else{//TCP
-                socket = Socket(ip, portNumber)
-                writer = PrintWriter(socket!!.getOutputStream(), true)
-                reader = socket!!.getInputStream()
-                println("TCP Socket 已初始化：发送端 ${socket?.localPort}，接收端绑定在端口 $portNumber")
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        socket = Socket(ip, portNumber)
+                        writer = socket!!.getOutputStream()
+                        reader = socket!!.getInputStream()
+
+                        withContext(Dispatchers.Main) {
+                            isConnect = true
+                            connectionStatus = "Connected to ${ip}:$portNumber"
+                            println("TCP Socket 已初始化：发送端 ${socket?.localPort}，接收端绑定在端口 $portNumber")
+                        }
+                    } catch (e: ConnectException){
+                        withContext(Dispatchers.Main) {
+                            isConnect = false
+                            connectionStatus = "Failed to connected to ${ip}:$portNumber"
+                            println("TCP Socket连接失败")
+                        }
+                    }
+                }
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -424,7 +393,9 @@ class UDPAudioChat(
 
     //作用：停止连接
     fun disConnect(){
+        isRecording = false //关闭录音
         isConnect = false
+        connectionStatus = "Connection is closed."
         writer?.close()
         reader?.close()
         socket?.close()
@@ -495,7 +466,14 @@ class UDPAudioChat(
                     sendAudioData(dataToSend)
                 }
             }
-            audioRecord?.stop()
+            withContext(NonCancellable) {
+                try {
+                    audioRecord?.stop()
+                } catch (e: Exception) {
+                    //e.printStackTrace()
+                }
+                audioRecord?.release()
+            }
             audioRecord?.release()
         }
     }
@@ -515,7 +493,7 @@ class UDPAudioChat(
         // 初始化 AudioTrack
         audioTrack = AudioTrack(
             AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                .setUsage(AudioAttributes.USAGE_MEDIA) //使用USAGE_VOICE_COMMUNICATION就是听筒，使用USAGE_MEDIA是扬声器
                 .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                 .build(),
             AudioFormat.Builder()
@@ -539,7 +517,11 @@ class UDPAudioChat(
                     audioTrack?.write(receivedData, 0, receivedData.size)
                 }
             }
-            audioTrack?.stop()
+            try {
+                audioTrack?.stop()
+            } catch (e: Exception) {
+                //e.printStackTrace()
+            }
             audioTrack?.release()
         }
     }
@@ -582,10 +564,12 @@ class UDPAudioChat(
                 return
             }
             try{
-                writer?.println(data)
+                writer?.write(data)
+                writer?.flush()
             } catch (e: Exception) {
                 //e.printStackTrace()
                 isConnect = false
+                connectionStatus = "Connection closed."
                 //断连之后自动重试连接
                 startReconnect { }
             }
@@ -618,7 +602,7 @@ class UDPAudioChat(
             }
         }else{ //TCP
             if (!isConnect || reader == null) {
-                println("当前未连接，无法接收消息")
+                //println("当前未连接，无法接收消息")
                 return null
             }
             return try{
@@ -628,7 +612,7 @@ class UDPAudioChat(
                 // 调用数据处理函数（例如解码），这里示例直接调用 handleReceivedData
                 handleReceivedData(buffer, bytesRead)
                 // 返回真正接收到的数据（去除缓冲区中无效部分）【需改】
-                buffer.copyOf(bytesRead)
+                buffer
             } catch (e: Exception) {
                 e.printStackTrace()
                 isConnect = false
@@ -658,7 +642,7 @@ class UDPAudioChat(
             try {
                 record.stop()
             } catch (e: Exception) {
-                e.printStackTrace()
+                //e.printStackTrace()
             }
             record.release()
         }
@@ -670,7 +654,7 @@ class UDPAudioChat(
             try {
                 track.stop()
             } catch (e: Exception) {
-                e.printStackTrace()
+                //e.printStackTrace()
             }
             track.release()
         }
