@@ -20,6 +20,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -38,6 +39,7 @@ import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.*
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -125,19 +127,41 @@ fun VoiceChatButton(
     onStop: () -> Unit,
     onSetting: () -> Unit
 ) {
+    // 状态变量用来标记长按事件是否触发
+    var longPressed by remember { mutableStateOf(false) }
+
     Box(
         modifier = Modifier
             .padding(8.dp)
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            // 设置背景和圆角效果，使其看起来像一个按钮
-            .background(MaterialTheme1.colors.primary, shape = RoundedCornerShape(30.dp))
-            // 使用 combinedClickable 同时处理短按和长按事件
+            .size(30.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme1.colors.primary)
             .combinedClickable(
-                onClick = { if (isTalking) onStop() else onStart() },
-                onLongClick = onSetting
-            )
+                onClick = {
+                    // 如果之前没有触发长按，再执行短按逻辑
+                    if (!longPressed) {
+                        if (isTalking) onStop() else onStart()
+                    }
+                    // 重置状态
+                    longPressed = false
+                },
+                onLongClick = {
+                    // 标记长按已发生，并执行长按逻辑
+                    longPressed = true
+                    onSetting()
+                }
+            ),
+        contentAlignment = Alignment.Center
     ) {
-        Text(if (isTalking) "关" else "开")
+        Text(
+            text = if (isTalking) "关" else "开",
+            modifier = Modifier
+                .fillMaxSize()
+                .wrapContentSize(Alignment.Center),
+            textAlign = TextAlign.Center,
+            style = MaterialTheme1.typography.h6,
+            color = MaterialTheme1.colors.onPrimary
+        )
     }
 }
 
@@ -162,6 +186,41 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
     //是否显示语音器设置地址Dialog
     var showAudioSettingDialog by remember { mutableStateOf(false) }
 
+    // 保存是否已经获取了录音和蓝牙权限的状态
+    var hasRecordAndBluetoothPermission by remember { mutableStateOf(
+        ActivityCompat.checkSelfPermission(
+            current,
+            Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED &&
+                // 对于 Android 12 及以上，需要检查 BLUETOOTH_CONNECT 权限，否则默认认为已获得权限
+                (if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S)
+                    ActivityCompat.checkSelfPermission(
+                        current,
+                        Manifest.permission.BLUETOOTH_CONNECT
+                    ) == PackageManager.PERMISSION_GRANTED
+                else true)
+    ) }
+    // 创建一个请求多个权限的 launcher
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val recordGranted = permissions[Manifest.permission.RECORD_AUDIO] ?: false
+        val bluetoothGranted =
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                permissions[Manifest.permission.BLUETOOTH_CONNECT] ?: false
+            } else {
+                true
+            }
+        hasRecordAndBluetoothPermission = recordGranted && bluetoothGranted
+
+        if (hasRecordAndBluetoothPermission) {
+            // 用户同意所有权限后启动录音
+            audioManager.startRecord(current)
+        } else {
+            Toast.makeText(current, "必须授予录音和蓝牙权限才能使用该功能", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     // 开始执行一次
     LaunchedEffect(Unit) {
         //启动游戏
@@ -171,18 +230,32 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
             audioManager.ip = tcpConnector!!.ip
             audioManager.isServer = (OnlineState.Server == onlineState)
             //自动监听和尝试连接
-            audioManager.listen(tcp = false) //不管哪边都打开udp监听
+            audioManager.listen(tcp = false) //不管哪边都打开udp监听和连接
+            audioManager.connect(tcp = false)
             if(audioManager.isServer){
                 //服务器自动监听tcp端口
-                audioManager.listen(tcp=true)
-                if(!audioManager.isTCP){
-                    audioManager.connect()
-                }
+                audioManager.listen(tcp = true)
             }else{
-                audioManager.connect()
+                //客户端自动尝试连接tcp端口
+                audioManager.connect(tcp = true)
             }
             //自动播放远端音频
             audioManager.startAudioPlay()
+            //自动申请权限并录音
+            // 如果还没有权限，则申请权限
+            if (!hasRecordAndBluetoothPermission) {
+                val permissionsToRequest = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                    arrayOf(
+                        Manifest.permission.RECORD_AUDIO,
+                        Manifest.permission.BLUETOOTH_CONNECT
+                    )
+                } else {
+                    arrayOf(Manifest.permission.RECORD_AUDIO)
+                }
+                permissionLauncher.launch(permissionsToRequest)
+            }
+            // 权限已具备，则直接启动录音
+            audioManager.startRecord(current)
         }
     }
 
@@ -316,6 +389,7 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
     //设置音频地址
     if (showAudioSettingDialog) {
         AlertDialog(
+            modifier = Modifier.heightIn(600.dp),
             onDismissRequest = { /* 不允许点击外部关闭弹窗 */ },
             title = { Text(text = "语音设置") },
             text = {
@@ -329,78 +403,6 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
                 }
             }
         )
-    }
-
-    // 保存是否已经获取了录音和蓝牙权限的状态
-    var hasRecordAndBluetoothPermission by remember { mutableStateOf(
-        ActivityCompat.checkSelfPermission(
-            current,
-            Manifest.permission.RECORD_AUDIO
-        ) == PackageManager.PERMISSION_GRANTED &&
-                // 对于 Android 12 及以上，需要检查 BLUETOOTH_CONNECT 权限，否则默认认为已获得权限
-                (if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S)
-                    ActivityCompat.checkSelfPermission(
-                        current,
-                        Manifest.permission.BLUETOOTH_CONNECT
-                    ) == PackageManager.PERMISSION_GRANTED
-                else true)
-    ) }
-    // 创建一个请求多个权限的 launcher
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val recordGranted = permissions[Manifest.permission.RECORD_AUDIO] ?: false
-        val bluetoothGranted =
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                permissions[Manifest.permission.BLUETOOTH_CONNECT] ?: false
-            } else {
-                true
-            }
-        hasRecordAndBluetoothPermission = recordGranted && bluetoothGranted
-
-        if (hasRecordAndBluetoothPermission) {
-            // 用户同意所有权限后启动录音
-            audioManager.startRecord(current)
-        } else {
-            Toast.makeText(current, "必须授予录音和蓝牙权限才能使用该功能", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    //监听用户切换语音连接方式
-    LaunchedEffect(audioManager.isTCP){
-        //切换时自动关闭录音
-        audioManager.stopRecord()
-    }
-
-    //监听用户是否尝试开启录音
-    LaunchedEffect(audioManager.isTryRecording){
-        println("监听到isTryRecording变化，当前：${audioManager.isTryRecording}")
-        if(audioManager.isTryRecording){ //尝试开启录音
-            if((audioManager.isTCP && !audioManager.isConnect) || (!audioManager.isTCP && !audioManager.isUDPConnect)){ //检查是否开启网络连接
-                Toast.makeText(current, "连接语音服务器后才能开启录音", Toast.LENGTH_LONG).show()
-                audioManager.isTryRecording = false
-            } else{
-                //开启录音
-                // 如果还没有权限，则申请权限
-                if (!hasRecordAndBluetoothPermission) {
-                    val permissionsToRequest = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                        arrayOf(
-                            Manifest.permission.RECORD_AUDIO,
-                            Manifest.permission.BLUETOOTH_CONNECT
-                        )
-                    } else {
-                        arrayOf(Manifest.permission.RECORD_AUDIO)
-                    }
-                    permissionLauncher.launch(permissionsToRequest)
-                    audioManager.isTryRecording = false
-                } else {
-                    // 权限已具备，则直接启动录音
-                    audioManager.startRecord(current)
-                }
-            }
-        }else{ //尝试关闭录音
-            audioManager.stopRecord()
-        }
     }
 
     //UI显示
@@ -632,16 +634,19 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
                     modifier = Modifier
                         .fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.Bottom
+                    verticalAlignment = Alignment.CenterVertically
                 ){
                     // 语音聊天按钮
                     VoiceChatButton(
-                        isTalking = audioManager.isRecording,
+                        isTalking = audioManager.isSendRecording,
                         onStart = {
-                            audioManager.isTryRecording = true
+                            if((audioManager.isTCP && !audioManager.isConnect) || (!audioManager.isTCP && !audioManager.isUDPConnect)){ //检查是否开启网络连接
+                                Toast.makeText(current, "连接语音服务器后才能开启录音", Toast.LENGTH_LONG).show()
+                            } else
+                                audioManager.isSendRecording = true
                         },
                         onStop = {
-                            audioManager.isTryRecording = false
+                            audioManager.isSendRecording = false
                         },
                         onSetting = {
                             showAudioSettingDialog = true

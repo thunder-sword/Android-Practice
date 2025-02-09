@@ -8,12 +8,7 @@ import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.AutomaticGainControl
 import android.media.audiofx.NoiseSuppressor
 import android.widget.Toast
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -25,6 +20,7 @@ import androidx.compose.material.TextField
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
@@ -62,8 +58,9 @@ class AudioChatManager(
     // 状态参数
     var isRecording by mutableStateOf(false)
     var isPlaying by mutableStateOf(false)
-    var isTryRecording by mutableStateOf(false)
+    var isSendRecording by mutableStateOf(false)
     var isUDPConnect by mutableStateOf(false)
+    var isPause by mutableStateOf(false)
 
     // 配置音频参数
     private val channelConfig = AudioFormat.CHANNEL_IN_MONO
@@ -73,6 +70,8 @@ class AudioChatManager(
     // 保存 AudioRecord 和 AudioTrack 的引用，方便后续停止和释放资源
     private var audioRecord: AudioRecord? = null
     private var audioTrack: AudioTrack? = null
+    private var speakerAudioTrack: AudioTrack? = null
+    var isSpeaker by mutableStateOf(true)
 
     // UDP 发送与接收 Socket（connect() 中初始化）
     private var sendSocket: DatagramSocket? = null
@@ -88,127 +87,159 @@ class AudioChatManager(
     //@Preview(showBackground = true)
     @Composable
     fun Panel(){
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+        val current = LocalContext.current
+
+        //监听用户切换语音连接方式
+        LaunchedEffect(isTCP){
+            //切换时自动关闭录音
+            isSendRecording = false
+        }
+
+        val scrollState1 = rememberScrollState()
+
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(max = 600.dp) // 最大高度
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically  // 设置垂直居中对齐
-            ) {
-                Switch(
-                    checked = isTCP,
-                    onCheckedChange = {
-                        isTCP = it // 当状态改变时会自动更新
-                    }
-                )
-                Text("TCP")
-            }
-
-            //让文本框支持向下滚动
-            val scrollState1 = rememberScrollState()
-            Box(
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(scrollState1),
-                contentAlignment = Alignment.TopCenter
+                    .verticalScroll(scrollState1)
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                SelectionContainer {
-                    Text(connectionStatus, Modifier.padding(8.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically  // 设置垂直居中对齐
+                ) {
+                    Switch(
+                        checked = isTCP,
+                        onCheckedChange = {
+                            isTCP = it // 当状态改变时会自动更新
+                        }
+                    )
+                    Text("TCP")
+                    Switch(
+                        checked = !isPause,
+                        onCheckedChange = {
+                            isPause = !it // 当状态改变时会自动更新
+                        }
+                    )
+                    Text("播放音频")
+                    Switch(
+                        checked = isSpeaker,
+                        onCheckedChange = {
+                            isSpeaker = it // 当状态改变时会自动更新
+                        }
+                    )
+                    Text("扬声器")
                 }
-            }
 
-            //UDP和TCP Server需要监听
-            if((isTCP && isServer) || !isTCP){
-                Text(text = "请输入语音服务器监听端口")
-                TextField(
-                    value = listenPort,
-                    onValueChange = { listenPort = it },
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
-                    keyboardOptions = KeyboardOptions.Default.copy(keyboardType = KeyboardType.Number),
-                    label = { Text("Enter Port") }
-                )
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.TopCenter
+                ) {
+                    SelectionContainer {
+                        Text(connectionStatus, Modifier.padding(8.dp))
+                    }
+                }
+
+                //UDP和TCP Server需要监听
+                if ((isTCP && isServer) || !isTCP) {
+                    Text(text = "请输入语音服务器监听端口")
+                    TextField(
+                        value = listenPort,
+                        onValueChange = { listenPort = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(2.dp),
+                        keyboardOptions = KeyboardOptions.Default.copy(keyboardType = KeyboardType.Number),
+                        label = { Text("Enter Port") }
+                    )
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically  // 设置垂直居中对齐
+                    ) {
+                        Button(
+                            modifier = Modifier.padding(4.dp),
+                            onClick = {
+                                listen(isTCP)
+                            }) {
+                            Text("监听")
+                        }
+                        Button(
+                            modifier = Modifier.padding(4.dp),
+                            onClick = {
+                                if (isTCP) {
+                                    stopListen()
+                                } else {
+                                    isUDPConnect = false
+                                    sendSocket?.close()
+                                    sendSocket = null
+                                }
+                            }) {
+                            Text("停止监听")
+                        }
+                    }
+                }
+
+                //如果是UDP或者不是TCP服务器需要输入连接地址
+                if (!isTCP || !isServer) {
+                    Text(text = "请输入语音服务器地址")
+                    TextField(
+                        value = ip,
+                        onValueChange = { ip = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(2.dp),
+                        label = { Text("Enter IP Address") }
+                    )
+
+                    TextField(
+                        value = port,
+                        onValueChange = { port = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(2.dp),
+                        keyboardOptions = KeyboardOptions.Default.copy(keyboardType = KeyboardType.Number),
+                        label = { Text("Enter Port") }
+                    )
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically  // 设置垂直居中对齐
+                    ) {
+                        Button(
+                            modifier = Modifier.padding(4.dp),
+                            onClick = {
+                                connect(isTCP)
+                            }) {
+                            Text("连接")
+                        }
+                        Button(
+                            modifier = Modifier.padding(4.dp),
+                            onClick = {
+                                disConnect()
+                            }) {
+                            Text("停止连接")
+                        }
+                    }
+
+                }
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically  // 设置垂直居中对齐
                 ) {
-                    Button(
-                        modifier = Modifier.padding(4.dp),
-                        onClick = {
-                            listen(isTCP)
-                        }) {
-                        Text("监听")
-                    }
-                    Button(
-                        modifier = Modifier.padding(4.dp),
-                        onClick = {
-                            if(isTCP) {
-                                stopListen()
-                            }else{
-                                isUDPConnect = false
-                                sendSocket?.close()
-                                sendSocket = null
-                            }
-                        }) {
-                        Text("停止监听")
-                    }
+                    Switch(
+                        checked = isSendRecording,
+                        onCheckedChange = {
+                            if((isTCP && !isConnect) || (!isTCP && !isUDPConnect)){ //检查是否开启网络连接
+                                Toast.makeText(current, "连接语音服务器后才能开启录音", Toast.LENGTH_LONG).show()
+                            } else
+                                isSendRecording = it // 当状态改变时会自动更新
+                        }
+                    )
+                    Text("开启录音")
                 }
-            }
-
-            //如果是UDP或者不是TCP服务器需要输入连接地址
-            if (!isTCP || !isServer) {
-                Text(text = "请输入语音服务器地址")
-                TextField(
-                    value = ip,
-                    onValueChange = { ip = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
-                    label = { Text("Enter IP Address") }
-                )
-
-                TextField(
-                    value = port,
-                    onValueChange = { port = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
-                    keyboardOptions = KeyboardOptions.Default.copy(keyboardType = KeyboardType.Number),
-                    label = { Text("Enter Port") }
-                )
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically  // 设置垂直居中对齐
-                ) {
-                    Button(
-                        modifier = Modifier.padding(8.dp),
-                        onClick = {
-                            connect()
-                        }) {
-                        Text("连接")
-                    }
-                    Button(
-                        modifier = Modifier.padding(8.dp),
-                        onClick = {
-                            disConnect()
-                        }) {
-                        Text("停止连接")
-                    }
-                }
-
-            }
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically  // 设置垂直居中对齐
-            ) {
-                Switch(
-                    checked = isTryRecording || isRecording,
-                    onCheckedChange = {
-                        isTryRecording = it // 当状态改变时会自动更新
-                    }
-                )
-                Text("开启录音")
             }
         }
     }
@@ -249,6 +280,7 @@ class AudioChatManager(
                     withContext(Dispatchers.Main) {
                         isConnect = false
                         isListen = false
+                        isSendRecording = false
                         connectionStatus = "Error: ${e.message}"
                     }
                 }
@@ -258,7 +290,7 @@ class AudioChatManager(
 
     //作用：停止监听端口
     fun stopListen(){
-        isRecording = false //关闭录音
+        isSendRecording = false //关闭录音
         isConnect = false
         isListen = false
         reader?.close()
@@ -271,11 +303,6 @@ class AudioChatManager(
 
     //作用：重试连接
     fun startReconnect(onReconnectSuccess: (() -> Unit)? = null) {
-        //UDP不需要重连
-        if(!isTCP){
-            println("UDP不需要重连")
-            return
-        }
         connectionStatus = "attempt at $reconnectAttempts"
         println("当前重连次数：$reconnectAttempts")
         if (reconnectAttempts >= maxReconnectAttempts) {
@@ -296,7 +323,7 @@ class AudioChatManager(
                         connectionStatus = "Reconnecting... Attempt $reconnectAttempts"
                     }
 
-                    if (connect()) {
+                    if (connect(true)) {
                         isConnect = true
                         isReconnecting = false
                         reconnectAttempts = 0
@@ -353,11 +380,11 @@ class AudioChatManager(
      * 调用此函数后，录音时发送的数据才会真正通过网络发送出去，
      * 播放时也可以从网络接收数据。
      */
-    fun connect(): Boolean {
+    fun connect(tcp: Boolean): Boolean {
         val portNumber = listenPort.toIntOrNull()!!
         println("正在尝试连接$ip:$portNumber，是否TCP：$isTCP")
         try {
-            if(!isTCP) {//UDP
+            if(!tcp) {//UDP
                 // 初始化发送端（系统会随机分配本地端口）
                 sendSocket = DatagramSocket()
                 connectionStatus = "UDP has connected"
@@ -366,6 +393,11 @@ class AudioChatManager(
             else{//TCP
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
+                        withContext(Dispatchers.Main) {
+                            isConnect = false
+                            connectionStatus = "Try connecting to ${ip}:$portNumber"
+                        }
+
                         socket = Socket(ip, portNumber)
                         writer = socket!!.getOutputStream()
                         reader = socket!!.getInputStream()
@@ -378,6 +410,7 @@ class AudioChatManager(
                     } catch (e: ConnectException){
                         withContext(Dispatchers.Main) {
                             isConnect = false
+                            isSendRecording = false
                             connectionStatus = "Failed to connected to ${ip}:$portNumber"
                             println("TCP Socket连接失败")
                         }
@@ -393,7 +426,7 @@ class AudioChatManager(
 
     //作用：停止连接
     fun disConnect(){
-        isRecording = false //关闭录音
+        isSendRecording = false //关闭录音
         isConnect = false
         connectionStatus = "Connection is closed."
         writer?.close()
@@ -460,6 +493,8 @@ class AudioChatManager(
             val buffer = ByteArray(bufferSize)
             while (isRecording) {
                 val bytesRead = audioRecord?.read(buffer, 0, buffer.size) ?: 0
+                //如果没开启录音则不发送
+                if(!isSendRecording) continue
                 if (bytesRead > 0) {
                     // 复制有效数据并发送
                     val dataToSend = buffer.copyOf(bytesRead)
@@ -482,6 +517,7 @@ class AudioChatManager(
      * 停止录音
      */
     fun stopRecord() {
+        isSendRecording = false
         isRecording = false
     }
 
@@ -492,6 +528,20 @@ class AudioChatManager(
     fun startAudioPlay() {
         // 初始化 AudioTrack
         audioTrack = AudioTrack(
+            AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION) //使用USAGE_VOICE_COMMUNICATION就是听筒，使用USAGE_MEDIA是扬声器
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build(),
+            AudioFormat.Builder()
+                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                .setSampleRate(sampleRate)
+                .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                .build(),
+            bufferSize,
+            AudioTrack.MODE_STREAM,
+            AudioManager.AUDIO_SESSION_ID_GENERATE
+        )
+        speakerAudioTrack = AudioTrack(
             AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_MEDIA) //使用USAGE_VOICE_COMMUNICATION就是听筒，使用USAGE_MEDIA是扬声器
                 .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
@@ -507,22 +557,51 @@ class AudioChatManager(
         )
 
         audioTrack?.play()
+        speakerAudioTrack?.play()
         isPlaying = true
 
         // 启动后台协程不断接收数据并播放
         CoroutineScope(Dispatchers.IO).launch {
             while (isPlaying) {
-                val receivedData = receiveFromNetwork()
+                if(isPause) continue
+                val receivedData = receiveFromNetwork(true)        //TCP读取数据线程
                 if (receivedData != null && receivedData.isNotEmpty()) {
-                    audioTrack?.write(receivedData, 0, receivedData.size)
+                    if(isSpeaker)
+                        speakerAudioTrack?.write(receivedData, 0, receivedData.size)
+                    else
+                        audioTrack?.write(receivedData, 0, receivedData.size)
                 }
             }
             try {
                 audioTrack?.stop()
+                speakerAudioTrack?.stop()
             } catch (e: Exception) {
-                //e.printStackTrace()
+                e.printStackTrace()
             }
             audioTrack?.release()
+            speakerAudioTrack?.release()
+        }
+
+        // 同时启动UDP读取线程
+        CoroutineScope(Dispatchers.IO).launch {
+            while (isPlaying) {
+                if(isPause) continue
+                val receivedData = receiveFromNetwork(false)        //UDP读取数据线程
+                if (receivedData != null && receivedData.isNotEmpty()) {
+                    if(isSpeaker)
+                        speakerAudioTrack?.write(receivedData, 0, receivedData.size)
+                    else
+                        audioTrack?.write(receivedData, 0, receivedData.size)
+                }
+            }
+            try {
+                audioTrack?.stop()
+                speakerAudioTrack?.stop()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            audioTrack?.release()
+            speakerAudioTrack?.release()
         }
     }
 
@@ -567,11 +646,7 @@ class AudioChatManager(
                 writer?.write(data)
                 writer?.flush()
             } catch (e: Exception) {
-                //e.printStackTrace()
-                isConnect = false
-                connectionStatus = "Connection closed."
-                //断连之后自动重试连接
-                startReconnect { }
+                e.printStackTrace()
             }
         }
     }
@@ -581,8 +656,9 @@ class AudioChatManager(
      * 如果需要，可在此处对数据进行解码
      * 要求：在调用 startAudioPlay() 前必须调用 connect() 初始化 receiveSocket
      */
-    private fun receiveFromNetwork(): ByteArray? {
-        if (!isTCP){ //UDP
+    private fun receiveFromNetwork(tcp: Boolean): ByteArray? {
+        //同时接收两个数据，哪个收到数据更多就返回哪个数据
+        if (!tcp){ //UDP
             if (receiveSocket == null) {
                 println("receiveSocket 尚未初始化，请先调用 connect()")
                 return null
@@ -616,6 +692,10 @@ class AudioChatManager(
             } catch (e: Exception) {
                 e.printStackTrace()
                 isConnect = false
+                isSendRecording = false
+                connectionStatus = "Connection closed."
+                //断连之后自动重试连接
+                startReconnect { }
                 null
             }
         }
@@ -638,6 +718,7 @@ class AudioChatManager(
     fun onDestroy() {
         // 停止录音
         isRecording = false
+        isSendRecording = false
         audioRecord?.let { record ->
             try {
                 record.stop()

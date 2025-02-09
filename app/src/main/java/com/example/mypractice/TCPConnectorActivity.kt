@@ -31,8 +31,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.lifecycle.ViewModelProvider
 import com.example.mypractice.ui.theme.MyPracticeTheme
 import kotlinx.coroutines.*
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.PrintWriter
@@ -79,8 +77,6 @@ open class TCPConnector{
     protected val reconnectInterval = 2000L // 重连间隔时间（毫秒）
     var isReconnecting by mutableStateOf(false)
 
-    protected val mutex = Mutex()
-
     var onMessageReceived: ((String) -> Unit)? = null
 
     //作用：发送消息
@@ -104,12 +100,14 @@ open class TCPConnector{
                 writer?.println(message)
                 writer?.flush()
                 withContext(Dispatchers.Main) {
+                    println("Sent: $message")
                     receivedMessages += "\nSent: $message"
                     //发送信息后清空输入框
                     messageToSend = ""
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
+                    println("Failed to sent: $message")
                     receivedMessages += "\nFailed to send: ${e.message}"
                 }
             }
@@ -198,33 +196,31 @@ open class TCPConnector{
         reconnectAttempts++
 
         CoroutineScope(Dispatchers.IO).launch {
-            mutex.withLock {
-                try {
+            try {
+                withContext(Dispatchers.Main) {
+                    connectionStatus = "Reconnecting... Attempt $reconnectAttempts"
+                }
+
+                if (_connect()) {
+                    isConnect = true
+                    isReconnecting = false
+                    reconnectAttempts = 0
+
                     withContext(Dispatchers.Main) {
-                        connectionStatus = "Reconnecting... Attempt $reconnectAttempts"
+                        connectionStatus = "Reconnected to ${ip}:${port}"
+                        onReconnectSuccess?.invoke() // 调用回调
                     }
 
-                    if (_connect()) {
-                        isConnect = true
-                        isReconnecting = false
-                        reconnectAttempts = 0
-
-                        withContext(Dispatchers.Main) {
-                            connectionStatus = "Reconnected to ${ip}:${port}"
-                            onReconnectSuccess?.invoke() // 调用回调
-                        }
-
-                        listenForMessages { message ->
-                            receivedMessages += "\n$message"
-                            onMessageReceived?.invoke(message)
-                        }
-                    } else {
-                        delay(reconnectInterval)
-                        startReconnect(onReconnectSuccess)
+                    listenForMessages { message ->
+                        receivedMessages += "\n$message"
+                        onMessageReceived?.invoke(message)
                     }
-                } catch (e: Exception) {
+                } else {
+                    delay(reconnectInterval)
                     startReconnect(onReconnectSuccess)
                 }
+            } catch (e: Exception) {
+                startReconnect(onReconnectSuccess)
             }
         }
     }
