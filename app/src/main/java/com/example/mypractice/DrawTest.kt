@@ -217,7 +217,7 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
             // 用户同意所有权限后启动录音
             audioManager.startRecord(current)
         } else {
-            Toast.makeText(current, "必须授予录音和蓝牙权限才能使用该功能", Toast.LENGTH_SHORT).show()
+            Toast.makeText(current, "必须授予录音和蓝牙权限才能使用通话功能", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -253,9 +253,10 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
                     arrayOf(Manifest.permission.RECORD_AUDIO)
                 }
                 permissionLauncher.launch(permissionsToRequest)
+            }else {
+                // 权限已具备，则直接启动录音
+                audioManager.startRecord(current)
             }
-            // 权限已具备，则直接启动录音
-            audioManager.startRecord(current)
         }
     }
 

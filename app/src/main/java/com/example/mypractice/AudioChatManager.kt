@@ -48,6 +48,9 @@ class AudioChatManager(
     private var socket: Socket? = null
     private var writer: OutputStream? = null
     private var reader: InputStream? = null
+    //TCP超时时间
+    private var connectTimeoutMillis: Int = 5000 //毫秒
+    private var timeoutMillis: Int = 1000 //毫秒
 
     // 网络配置（在使用前请先调用 connect() 建立 UDP Socket）
     var ip by mutableStateOf("")
@@ -265,6 +268,7 @@ class AudioChatManager(
                     isListen = true
 
                     socket = serverSocket!!.accept()
+                    socket!!.soTimeout = timeoutMillis
                     writer = socket!!.getOutputStream()
                     reader = socket!!.getInputStream()
 
@@ -351,6 +355,7 @@ class AudioChatManager(
                         isListen = true
 
                         socket = serverSocket!!.accept()
+                        socket!!.soTimeout = timeoutMillis
                         writer = socket!!.getOutputStream()
                         reader = socket!!.getInputStream()
 
@@ -398,7 +403,10 @@ class AudioChatManager(
                             connectionStatus = "Try connecting to ${ip}:$portNumber"
                         }
 
-                        socket = Socket(ip, portNumber)
+                        socket = Socket()
+                        socket!!.connect(InetSocketAddress(ip, portNumber), connectTimeoutMillis)
+                        //设置读取发送超时时间
+                        socket!!.soTimeout = timeoutMillis
                         writer = socket!!.getOutputStream()
                         reader = socket!!.getInputStream()
 
@@ -413,6 +421,13 @@ class AudioChatManager(
                             isSendRecording = false
                             connectionStatus = "Failed to connected to ${ip}:$portNumber"
                             println("TCP Socket连接失败")
+                        }
+                    } catch (e: SocketTimeoutException){
+                        withContext(Dispatchers.Main) {
+                            isConnect = false
+                            isSendRecording = false
+                            connectionStatus = "Timeout failed to connected to ${ip}:$portNumber"
+                            println("TCP Socket连接超时")
                         }
                     }
                 }
@@ -647,6 +662,11 @@ class AudioChatManager(
                 writer?.flush()
             } catch (e: Exception) {
                 e.printStackTrace()
+                isConnect = false
+                isSendRecording = false
+                connectionStatus = "Connection closed."
+                //断连之后自动重试连接
+                startReconnect { }
             }
         }
     }
@@ -689,13 +709,17 @@ class AudioChatManager(
                 handleReceivedData(buffer, bytesRead)
                 // 返回真正接收到的数据（去除缓冲区中无效部分）【需改】
                 buffer
-            } catch (e: Exception) {
+            }catch (e: SocketTimeoutException){
+                //忽略
+                null
+            } catch (e: Exception) { //主要用来抓取SocketTimeoutException，以尝试重连
                 e.printStackTrace()
-                isConnect = false
-                isSendRecording = false
-                connectionStatus = "Connection closed."
-                //断连之后自动重试连接
-                startReconnect { }
+                //重连逻辑写在发送端
+//                isConnect = false
+//                isSendRecording = false
+//                connectionStatus = "Connection closed."
+//                //断连之后自动重试连接
+//                startReconnect { }
                 null
             }
         }
