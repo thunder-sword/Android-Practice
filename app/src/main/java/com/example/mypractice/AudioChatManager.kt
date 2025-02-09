@@ -274,7 +274,7 @@ class AudioChatManager(
 
                     isListen = false
 
-                    clientAddresses = "${socket?.inetAddress?.hostAddress}:${socket?.port}"
+                    clientAddresses = "[${socket?.inetAddress?.hostAddress}]:${socket?.port}"
 
                     withContext(Dispatchers.Main) {
                         isConnect = true
@@ -361,7 +361,7 @@ class AudioChatManager(
 
                         isListen = false
 
-                        clientAddresses = "${socket?.inetAddress?.hostAddress}:${socket?.port}"
+                        clientAddresses = "[${socket?.inetAddress?.hostAddress}]:${socket?.port}"
 
                         withContext(Dispatchers.Main) {
                             isConnect = true

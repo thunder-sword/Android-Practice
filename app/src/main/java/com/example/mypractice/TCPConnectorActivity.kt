@@ -34,7 +34,9 @@ import kotlinx.coroutines.*
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.PrintWriter
+import java.net.InetSocketAddress
 import java.net.Socket
+import java.net.SocketTimeoutException
 
 class TCPConnectorActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -64,12 +66,15 @@ open class TCPConnector{
     protected var writer: PrintWriter? = null
     protected var reader: BufferedReader? = null
     var isConnect by mutableStateOf(false)
-    var ip by mutableStateOf("192.168.2.18")
+    var ip by mutableStateOf("")
     var port by mutableStateOf("4399")
     var connectionStatus by mutableStateOf("Not Connected")
     var messageToSend by mutableStateOf("")
     var receivedMessages by mutableStateOf("")
     private var message by mutableStateOf("")
+
+    //TCP超时时间
+    private var connectTimeoutMillis: Int = 5000 //毫秒
 
     //重连相关变量
     protected var reconnectAttempts = 0
@@ -115,13 +120,21 @@ open class TCPConnector{
     }
 
     //作用：实际连接函数
-    private fun _connect(): Boolean{
+    private suspend fun _connect(): Boolean{
         try {
             val portNumber = port.toIntOrNull()!!
-            socket = Socket(ip, portNumber)
+            socket = Socket()
+            socket!!.connect(InetSocketAddress(ip, portNumber), connectTimeoutMillis)
             writer = PrintWriter(socket!!.getOutputStream(), true)
             reader = BufferedReader(InputStreamReader(socket!!.getInputStream()))
+        } catch (e: SocketTimeoutException){
+            withContext(Dispatchers.Main) {
+                connectionStatus = "Timeout failed to connected to [$ip]:$port"
+                println("TCP Socket连接超时")
+            }
+            return false
         } catch (e: Exception) {
+            e.printStackTrace()
             return false
         }
         return true

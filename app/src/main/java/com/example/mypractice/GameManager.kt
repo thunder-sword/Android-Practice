@@ -615,32 +615,34 @@ class GameManager(
                         if(GameState.Ended == currentState)
                             return
                         if(OnlineState.Client == onlineState){
-                            blockString = "与服务器连接断开，正在尝试回连..."
+                            blockQueryString = "与服务器连接断开，正在尝试回连，停止连接？"
                             tcpConnector?.startReconnect{
                                 //println("已执行成功回连成功回调函数")
                                 Toast.makeText(current, "回连成功", Toast.LENGTH_SHORT).show()
-                                blockString = "等待服务器创建棋局..."
+                                blockString = "等待服务器回复棋局..."
                                 //请求棋局
                                 sendMessage("query: chessBoard")
                                 //请求当前玩家
                                 sendMessage("query: currentPlayer")
                             }
-                        } else if(OnlineState.Server == onlineState){
-                            //先断开连接，不然容易导致回连到失效Socket
-                            tcpConnector?.disConnect(current)
-                            blockQueryString = "客户端断开连接，是否等待重连？"
                             onBlockQueryYes = {
-                                blockString = "正在等待回连..."
-                                tcpConnector?.startReconnect{
-                                    blockString = ""
-                                    Toast.makeText(current, "客户端已回连", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                            onBlockQueryNo = {
                                 Toast.makeText(current, "已结束游戏", Toast.LENGTH_SHORT).show()
                                 endGame()
                                 (current as? Activity)?.finish()
                             }
+                            onBlockQueryNo = null
+                        } else if(OnlineState.Server == onlineState){
+                            blockQueryString = "等待客户端重连，是否终止等待？"
+                            tcpConnector?.startReconnect{
+                                blockQueryString = ""
+                                Toast.makeText(current, "客户端已回连", Toast.LENGTH_SHORT).show()
+                            }
+                            onBlockQueryYes = {
+                                Toast.makeText(current, "已结束游戏", Toast.LENGTH_SHORT).show()
+                                endGame()
+                                (current as? Activity)?.finish()
+                            }
+                            onBlockQueryNo = null
                         }
                     }
                 }

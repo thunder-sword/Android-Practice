@@ -57,7 +57,7 @@ class TCPListener: TCPConnector(){
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                serverSocket = ServerSocket(portNumber)
+                serverSocket = ServerSocket(portNumber, 0) //设置监听序列为0
                 serverAddresses =
                     getLocalIPAddresses().joinToString("\n") { "$it:$portNumber" }
 
@@ -67,8 +67,7 @@ class TCPListener: TCPConnector(){
 
                 socket = serverSocket!!.accept()
                 writer = PrintWriter(socket!!.getOutputStream(), true)
-                reader =
-                    BufferedReader(InputStreamReader(socket!!.getInputStream()))
+                reader = BufferedReader(InputStreamReader(socket!!.getInputStream()))
 
                 isConnect = true
 
@@ -127,18 +126,6 @@ class TCPListener: TCPConnector(){
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                withContext(Dispatchers.Main) {
-                    connectionStatus = "Reconnecting... Attempt $reconnectAttempts"
-                }
-
-                // 关闭旧的 ServerSocket 和 Socket
-                serverSocket?.close()
-                socket?.close()
-
-                // 重新启动 ServerSocket
-                serverSocket = ServerSocket(port.toInt())
-                serverAddresses = getLocalIPAddresses().map { "$it:$port" }.joinToString("\n")
-
                 withContext(Dispatchers.Main) {
                     connectionStatus = "Server running on\n$serverAddresses"
                 }

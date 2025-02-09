@@ -310,22 +310,34 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
         AlertDialog(
             onDismissRequest = { /* 不允许点击外部关闭弹窗 */ },
             title = { Text(text = "提示") },
-            text = { Text(text = gameManager.blockQueryString) },
+            text = {
+                    Text(text = gameManager.blockQueryString)
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.CenterEnd
+                    ) {
+                        CircularProgressIndicator(color = MaterialTheme1.colors.onPrimary) // 加载指示器
+                    }
+                },
             confirmButton = {
-                Button(onClick = {
-                    gameManager.blockQueryString = ""
-                    gameManager.onBlockQueryYes?.invoke()
-                }) {
-                    Text("是")
+                if(null != gameManager.onBlockQueryYes) {
+                    Button(onClick = {
+                        gameManager.blockQueryString = ""
+                        gameManager.onBlockQueryYes?.invoke()
+                    }) {
+                        Text("是")
+                    }
                 }
             },
             dismissButton = {
-                Button(onClick = {
-                    // 关闭弹窗
-                    gameManager.blockQueryString = ""
-                    gameManager.onBlockQueryNo?.invoke()
-                }) {
-                    Text("否")
+                if(null != gameManager.onBlockQueryNo) {
+                    Button(onClick = {
+                        // 关闭弹窗
+                        gameManager.blockQueryString = ""
+                        gameManager.onBlockQueryNo?.invoke()
+                    }) {
+                        Text("否")
+                    }
                 }
             }
         )
