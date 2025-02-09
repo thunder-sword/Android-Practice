@@ -60,6 +60,14 @@ class GameManager(
     val onlineState: OnlineState = OnlineState.Local,        //联机状态
     val tcpConnector: TCPConnector? = null      //所用tcp连接器
 ) {
+    init {
+        //如果不是本地游戏需要操作
+        if (OnlineState.Local != onlineState){
+            //将接收信息回调函数传入，函数引用
+            tcpConnector!!.onMessageReceived = ::handleInst
+        }
+    }
+
     //当前游戏状态
     var currentState by mutableStateOf(GameState.Ended)
         private set
@@ -788,11 +796,6 @@ class GameManager(
             println("chessBoard: ${serializeChessBoard(currentBoard)}")
             println("currentPlayer: $currentPlayer")
 
-            //如果不是本地游戏需要操作
-            if (OnlineState.Local != onlineState){
-                //将接收信息回调函数传入，函数引用
-                tcpConnector!!.onMessageReceived = ::handleInst
-            }
             //如果是客户端
             if (OnlineState.Client == onlineState){
                 //设置当前玩家为玩家2

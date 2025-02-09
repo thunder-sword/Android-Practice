@@ -38,6 +38,8 @@ class AudioChatManager(
     var isServer by mutableStateOf(false)
     //TCP网络状态
     var connectionStatus by mutableStateOf("Not Connected")
+    //UCP网络状态
+    var udpConnectionStatus by mutableStateOf("Not Connected")
     //TCP的serverSocket
     var serverSocket: ServerSocket? = null
     var serverAddresses by mutableStateOf("")
@@ -103,7 +105,7 @@ class AudioChatManager(
         Box(
             Modifier
                 .fillMaxWidth()
-                .heightIn(max = 600.dp) // 最大高度
+                //.heightIn(max = 600.dp) // 最大高度
         ) {
             Column(
                 modifier = Modifier
@@ -143,7 +145,11 @@ class AudioChatManager(
                     contentAlignment = Alignment.TopCenter
                 ) {
                     SelectionContainer {
-                        Text(connectionStatus, Modifier.padding(8.dp))
+                        if(isTCP) {
+                            Text(connectionStatus, Modifier.padding(8.dp))
+                        } else{
+                            Text(udpConnectionStatus, Modifier.padding(8.dp))
+                        }
                     }
                 }
 
@@ -303,6 +309,7 @@ class AudioChatManager(
         serverSocket?.close()
         receiveSocket?.close()
         connectionStatus = "have close listening."
+        udpConnectionStatus = "have close listening."
     }
 
     //作用：重试连接
@@ -392,7 +399,7 @@ class AudioChatManager(
             if(!tcp) {//UDP
                 // 初始化发送端（系统会随机分配本地端口）
                 sendSocket = DatagramSocket()
-                connectionStatus = "UDP has connected"
+                udpConnectionStatus = "UDP has connected"
                 println("UDP Socket 已初始化：发送端 ${sendSocket?.localPort}，接收端绑定在端口 $portNumber")
             }
             else{//TCP
@@ -429,6 +436,13 @@ class AudioChatManager(
                             connectionStatus = "Timeout failed to connected to ${ip}:$portNumber"
                             println("TCP Socket连接超时")
                         }
+                    } catch (e: Exception){
+                        withContext(Dispatchers.Main) {
+                            isConnect = false
+                            isSendRecording = false
+                            connectionStatus = "Error: $e"
+                            e.printStackTrace()
+                        }
                     }
                 }
             }
@@ -444,6 +458,7 @@ class AudioChatManager(
         isSendRecording = false //关闭录音
         isConnect = false
         connectionStatus = "Connection is closed."
+        udpConnectionStatus = "Connection is closed."
         writer?.close()
         reader?.close()
         socket?.close()
@@ -655,6 +670,10 @@ class AudioChatManager(
         }else{//TCP
             if (!isConnect || writer == null) {
                 println("当前未连接，无法发送消息")
+                isSendRecording = false
+                connectionStatus = "Connection closed."
+                //断连之后自动重试连接
+                startReconnect { }
                 return
             }
             try{
@@ -709,15 +728,15 @@ class AudioChatManager(
                 handleReceivedData(buffer, bytesRead)
                 // 返回真正接收到的数据（去除缓冲区中无效部分）【需改】
                 buffer
-            }catch (e: SocketTimeoutException){
+            } catch (e: SocketTimeoutException){
                 //忽略
                 null
             } catch (e: Exception) { //主要用来抓取SocketTimeoutException，以尝试重连
                 e.printStackTrace()
                 //重连逻辑写在发送端
-//                isConnect = false
-//                isSendRecording = false
-//                connectionStatus = "Connection closed."
+                isConnect = false
+                isSendRecording = false
+                connectionStatus = "Connection closed."
 //                //断连之后自动重试连接
 //                startReconnect { }
                 null
