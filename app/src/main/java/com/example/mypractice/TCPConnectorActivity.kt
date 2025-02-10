@@ -16,21 +16,31 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.*
+import androidx.compose.material.AlertDialog
+import androidx.compose.material.Button
+import androidx.compose.material.MaterialTheme
+import androidx.compose.material.Surface
+import androidx.compose.material.Text
+import androidx.compose.material.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
 import com.example.mypractice.ui.theme.MyPracticeTheme
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.PrintWriter
@@ -124,9 +134,11 @@ open class TCPConnector{
         try {
             val portNumber = port.toIntOrNull()!!
             socket = Socket()
-            socket!!.connect(InetSocketAddress(ip, portNumber), connectTimeoutMillis)
-            writer = PrintWriter(socket!!.getOutputStream(), true)
-            reader = BufferedReader(InputStreamReader(socket!!.getInputStream()))
+            withContext(Dispatchers.IO) {
+                socket!!.connect(InetSocketAddress(ip, portNumber), connectTimeoutMillis)
+                writer = PrintWriter(socket!!.getOutputStream(), true)
+                reader = BufferedReader(InputStreamReader(socket!!.getInputStream()))
+            }
         } catch (e: SocketTimeoutException){
             withContext(Dispatchers.Main) {
                 connectionStatus = "Timeout failed to connected to [$ip]:$port"
@@ -275,7 +287,7 @@ fun ConnectorMainScreen(viewModel: GameViewModel) {
         }
     } else {
         // 用于控制弹窗是否显示
-        var showDialog by remember { mutableStateOf(true) }
+        var showDialog by rememberSaveable { mutableStateOf(true) }
 
         // 显示弹窗
         if (showDialog) {

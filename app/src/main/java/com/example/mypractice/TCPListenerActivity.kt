@@ -12,6 +12,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -199,7 +200,7 @@ fun ListenerMainScreen(viewModel: GameViewModel) {
         }
     } else {
         // 用于控制弹窗是否显示
-        var showDialog by remember { mutableStateOf(true) }
+        var showDialog by rememberSaveable { mutableStateOf(true) }
         // 显示弹窗
         if (showDialog) {
             AlertDialog(

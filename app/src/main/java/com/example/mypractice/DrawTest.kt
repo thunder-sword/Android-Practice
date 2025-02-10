@@ -26,6 +26,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -40,6 +41,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.*
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -184,10 +186,10 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
     //语音器
     val audioManager: AudioChatManager = remember { AudioChatManager() }
     //是否显示语音器设置地址Dialog
-    var showAudioSettingDialog by remember { mutableStateOf(false) }
+    var showAudioSettingDialog by rememberSaveable { mutableStateOf(false) }
 
     // 保存是否已经获取了录音和蓝牙权限的状态
-    var hasRecordAndBluetoothPermission by remember { mutableStateOf(
+    var hasRecordAndBluetoothPermission by rememberSaveable { mutableStateOf(
         ActivityCompat.checkSelfPermission(
             current,
             Manifest.permission.RECORD_AUDIO
@@ -285,7 +287,7 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
     val screenWidth = configuration.screenWidthDp.dp
     val screenHeight = configuration.screenHeightDp.dp
     // 使用 derivedStateOf 和 remember，让其只有在屏幕大小发生变化时才更改棋盘宽高
-    val chessBoardSize by remember(screenWidth, screenHeight) {
+    val chessBoardSize by remember (screenWidth, screenHeight) {
         derivedStateOf {
             gameManager.getBoardSize(screenWidth, screenHeight)
         }
@@ -484,7 +486,8 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
 
         //不堆叠UI
         Column(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally  //居中显示
         ) {
             //上部分容器
             Row(
@@ -708,6 +711,8 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
     )
 }
 
+@Suppress("PreviewAnnotationInFunctionWithParameters")
+@Preview
 @Composable
 fun DrawMain(viewModel: GameViewModel) {
     ChessBoard(viewModel)
