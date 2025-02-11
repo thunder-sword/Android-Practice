@@ -633,16 +633,21 @@ class AudioChatManager(
                 if(isPause) continue
                 val receivedData = receiveFromNetwork(true)        //TCP读取数据线程
                 if (receivedData != null && receivedData.isNotEmpty()) {
-                    // 解码得到 PCM 数据（short[]）
-                    val decodedPCM = decodeAudio(receivedData)
-                    // 将 short[] 转为 byte[]（AudioTrack 接受 byte[] 数据）
-                    val byteBuffer = ByteBuffer.allocate(decodedPCM.size * 2).order(ByteOrder.LITTLE_ENDIAN)
-                    decodedPCM.forEach { byteBuffer.putShort(it) }
-                    val pcmByteArray = byteBuffer.array()
-                    if (isSpeaker)
-                        speakerAudioTrack?.write(pcmByteArray, 0, pcmByteArray.size)
-                    else
-                        audioTrack?.write(pcmByteArray, 0, pcmByteArray.size)
+                    try {
+                        // 解码得到 PCM 数据（short[]）
+                        val decodedPCM = decodeAudio(receivedData)
+                        // 将 short[] 转为 byte[]（AudioTrack 接受 byte[] 数据）
+                        val byteBuffer =
+                            ByteBuffer.allocate(decodedPCM.size * 2).order(ByteOrder.LITTLE_ENDIAN)
+                        decodedPCM.forEach { byteBuffer.putShort(it) }
+                        val pcmByteArray = byteBuffer.array()
+                        if (isSpeaker)
+                            speakerAudioTrack?.write(pcmByteArray, 0, pcmByteArray.size)
+                        else
+                            audioTrack?.write(pcmByteArray, 0, pcmByteArray.size)
+                    } catch (e: Exception){
+                        e.printStackTrace()
+                    }
 //                    if(isSpeaker)
 //                        speakerAudioTrack?.write(receivedData, 0, receivedData.size)
 //                    else
@@ -665,10 +670,25 @@ class AudioChatManager(
                 if(isPause) continue
                 val receivedData = receiveFromNetwork(false)        //UDP读取数据线程
                 if (receivedData != null && receivedData.isNotEmpty()) {
-                    if(isSpeaker)
-                        speakerAudioTrack?.write(receivedData, 0, receivedData.size)
-                    else
-                        audioTrack?.write(receivedData, 0, receivedData.size)
+                    try {
+                        // 解码得到 PCM 数据（short[]）
+                        val decodedPCM = decodeAudio(receivedData)
+                        // 将 short[] 转为 byte[]（AudioTrack 接受 byte[] 数据）
+                        val byteBuffer =
+                            ByteBuffer.allocate(decodedPCM.size * 2).order(ByteOrder.LITTLE_ENDIAN)
+                        decodedPCM.forEach { byteBuffer.putShort(it) }
+                        val pcmByteArray = byteBuffer.array()
+                        if (isSpeaker)
+                            speakerAudioTrack?.write(pcmByteArray, 0, pcmByteArray.size)
+                        else
+                            audioTrack?.write(pcmByteArray, 0, pcmByteArray.size)
+                    } catch (e: Exception){
+                        e.printStackTrace()
+                    }
+//                    if(isSpeaker)
+//                        speakerAudioTrack?.write(receivedData, 0, receivedData.size)
+//                    else
+//                        audioTrack?.write(receivedData, 0, receivedData.size)
                 }
             }
             try {
@@ -754,8 +774,6 @@ class AudioChatManager(
                 val packet = DatagramPacket(buffer, buffer.size)
                 // 此方法会阻塞直到数据到达
                 receiveSocket?.receive(packet)
-                // 调用数据处理函数（例如解码），这里示例直接调用 handleReceivedData
-                handleReceivedData(packet.data, packet.length)
                 // 返回真正接收到的数据（去除缓冲区中无效部分）
                 packet.data.copyOf(packet.length)
             } catch (e: Exception) {
@@ -771,8 +789,6 @@ class AudioChatManager(
                 val buffer = ByteArray(bufferSize)
                 // 此方法会阻塞直到数据到达
                 val bytesRead = reader?.read(buffer) ?: 0
-                // 调用数据处理函数（例如解码），这里示例直接调用 handleReceivedData
-                handleReceivedData(buffer, bytesRead)
                 // 返回真正接收到的数据（去除缓冲区中无效部分）【需改】
                 buffer
             } catch (e: SocketTimeoutException){
@@ -789,20 +805,6 @@ class AudioChatManager(
                 null
             }
         }
-    }
-
-    /**
-     * 处理接收到的数据，例如进行解码或记录日志
-     * 如果数据经过编码（例如 Opus），可在此处进行解码后返回 PCM 数据
-     * 当前示例假定数据为原始 PCM，故仅打印日志。
-     *
-     * @param data   接收到的完整数据缓冲区
-     * @param length 有效数据长度
-     */
-    private fun handleReceivedData(data: ByteArray, length: Int) {
-        // TODO：如果发送端对录音数据进行了编码，则在此处对数据进行解码
-        //println("接收到音频数据，长度: $length")
-        // 这里可以将数据放入缓冲队列，或直接返回给播放线程
     }
 
     fun onDestroy() {
