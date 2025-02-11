@@ -28,10 +28,39 @@ import kotlinx.coroutines.*
 import java.io.InputStream
 import java.io.OutputStream
 import java.net.*
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 class AudioChatManager(
     val sampleRate: Int = 16000 // 采样率（Hz）
 ) {
+    //导入库
+    companion object {
+        init {
+            System.loadLibrary("opus-lib")	//这里需要和你的JNI文件名一致
+        }
+    }
+
+    // JNI 方法声明：建议在开始录音前初始化
+    external fun initOpusEncoder(sampleRate: Int, channels: Int, application: Int): Int
+    external fun initOpusDecoder(sampleRate: Int, channels: Int): Int
+    external fun encodeAudio(pcmData: ShortArray): ByteArray
+    external fun decodeAudio(opusData: ByteArray): ShortArray
+    external fun destroyOpus()
+
+    // 可在 startRecord() 方法中调用初始化（例如采用 OPUS_APPLICATION_VOIP，即应用场景为语音通信，值为2048）
+    init {
+        val encoderResult = initOpusEncoder(sampleRate, 1, 2048)
+        val decoderResult = initOpusDecoder(sampleRate, 1)
+        if (encoderResult != 0 || decoderResult != 0) {
+            // 处理错误
+            error("Opus 初始化失败: encoder=$encoderResult, decoder=$decoderResult")
+        } else {
+            println("Opus 初始化成功")
+        }
+    }
+
+
     //使用TCP还是UDP
     var isTCP by mutableStateOf(true)
     //是否是服务器
@@ -526,9 +555,17 @@ class AudioChatManager(
                 //如果没开启录音则不发送
                 if(!isSendRecording) continue
                 if (bytesRead > 0) {
-                    // 复制有效数据并发送
-                    val dataToSend = buffer.copyOf(bytesRead)
-                    sendAudioData(dataToSend)
+                    // 将 byte[] 转为 short[]（16位 PCM）
+                    val shortCount = bytesRead / 2
+                    val pcmShortArray = ShortArray(shortCount)
+                    ByteBuffer.wrap(buffer).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(pcmShortArray)
+                    // 调用 native 方法进行编码
+                    val encodedData = encodeAudio(pcmShortArray)
+                    // 发送编码后的数据
+                    sendAudioData(encodedData)
+//                    // 复制有效数据并发送
+//                    val dataToSend = buffer.copyOf(bytesRead)
+//                    sendAudioData(dataToSend)
                 }
             }
             withContext(NonCancellable) {
@@ -596,10 +633,20 @@ class AudioChatManager(
                 if(isPause) continue
                 val receivedData = receiveFromNetwork(true)        //TCP读取数据线程
                 if (receivedData != null && receivedData.isNotEmpty()) {
-                    if(isSpeaker)
-                        speakerAudioTrack?.write(receivedData, 0, receivedData.size)
+                    // 解码得到 PCM 数据（short[]）
+                    val decodedPCM = decodeAudio(receivedData)
+                    // 将 short[] 转为 byte[]（AudioTrack 接受 byte[] 数据）
+                    val byteBuffer = ByteBuffer.allocate(decodedPCM.size * 2).order(ByteOrder.LITTLE_ENDIAN)
+                    decodedPCM.forEach { byteBuffer.putShort(it) }
+                    val pcmByteArray = byteBuffer.array()
+                    if (isSpeaker)
+                        speakerAudioTrack?.write(pcmByteArray, 0, pcmByteArray.size)
                     else
-                        audioTrack?.write(receivedData, 0, receivedData.size)
+                        audioTrack?.write(pcmByteArray, 0, pcmByteArray.size)
+//                    if(isSpeaker)
+//                        speakerAudioTrack?.write(receivedData, 0, receivedData.size)
+//                    else
+//                        audioTrack?.write(receivedData, 0, receivedData.size)
                 }
             }
             try {
@@ -759,6 +806,8 @@ class AudioChatManager(
     }
 
     fun onDestroy() {
+        destroyOpus()  // 对应 JNI 中的释放方法
+
         // 停止录音
         isRecording = false
         isSendRecording = false

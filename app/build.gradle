@@ -18,6 +18,20 @@ android {
         vectorDrawables {
             useSupportLibrary true
         }
+
+        //添加CMake，不加参数
+        externalNativeBuild {
+            cmake {
+                cppFlags ""
+            }
+        }
+    }
+
+    //添加CMake外部构建支持
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+        }
     }
 
     buildTypes {
