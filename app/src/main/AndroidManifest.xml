@@ -2,8 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
     <!-- 申请网络访问权限 -->
-    <uses-permission android:name="android.permission.INTERNET" />
-    <!-- 申请录音和蓝牙设备使用权限 -->
+    <uses-permission android:name="android.permission.INTERNET" /> <!-- 申请录音和蓝牙设备使用权限 -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
@@ -17,7 +16,10 @@
         android:theme="@style/Theme.MyPractice"
         tools:targetApi="31">
         <activity
-            android:name=".DrawTest"
+            android:name=".ChatActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ChessGameActivity"
             android:exported="false" />
         <activity
             android:name=".TCPConnectorActivity"

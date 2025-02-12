@@ -28,7 +28,8 @@ class MainActivity : ComponentActivity() {
                         x -> when(x) {
                             1 -> startActivity(Intent(this, TCPListenerActivity::class.java))
                             2 -> startActivity(Intent(this, TCPConnectorActivity::class.java))
-                            3 -> startActivity(Intent(this, DrawTest::class.java))
+                            3 -> startActivity(Intent(this, ChessGameActivity::class.java))
+                            4 -> startActivity(Intent(this, ChatActivity::class.java))
                         else -> Toast.makeText(this@MainActivity, "未知的跳转页面", Toast.LENGTH_SHORT).show()
                         }
                     }
@@ -70,6 +71,14 @@ fun ChessGameMainScreen(startUp: (Int) -> Unit) {
                 }
             ) {
                 Text("本地双人游玩")
+            }
+
+            Button(
+                onClick = {
+                    startUp(4)
+                }
+            ) {
+                Text("聊天室")
             }
         }
     }

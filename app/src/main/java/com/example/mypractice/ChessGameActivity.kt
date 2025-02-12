@@ -56,7 +56,7 @@ import com.example.mypractice.ui.theme.chessBoardColor
 import kotlinx.coroutines.delay
 import androidx.compose.material.MaterialTheme as MaterialTheme1
 
-class DrawTest : ComponentActivity() {
+class ChessGameActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -234,7 +234,7 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
             //自动监听和尝试连接
             audioManager.listen(tcp = false) //不管哪边都打开udp监听和连接
             audioManager.connect(tcp = false)
-            if(audioManager.isServer){
+            if(true==audioManager.isServer){
                 //服务器自动监听tcp端口
                 audioManager.listen(tcp = true)
             }else{

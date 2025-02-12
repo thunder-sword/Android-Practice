@@ -64,7 +64,7 @@ class AudioChatManager(
     //使用TCP还是UDP
     var isTCP by mutableStateOf(true)
     //是否是服务器
-    var isServer by mutableStateOf(false)
+    var isServer : Boolean? = null
     //TCP网络状态
     var connectionStatus by mutableStateOf("Not Connected")
     //UCP网络状态
@@ -82,6 +82,9 @@ class AudioChatManager(
     //TCP超时时间
     private var connectTimeoutMillis: Int = 5000 //毫秒
     private var timeoutMillis: Int = 1000 //毫秒
+
+    // 录音帧大小（例如 320 个采样点，16位即 320*2 字节）
+    private val frameSize = 320
 
     // 网络配置（在使用前请先调用 connect() 建立 UDP Socket）
     var ip by mutableStateOf("")
@@ -183,7 +186,7 @@ class AudioChatManager(
                 }
 
                 //UDP和TCP Server需要监听
-                if ((isTCP && isServer) || !isTCP) {
+                if ((isTCP && (false != isServer)) || !isTCP) {
                     Text(text = "请输入语音服务器监听端口")
                     TextField(
                         value = listenPort,
@@ -222,7 +225,7 @@ class AudioChatManager(
                 }
 
                 //如果是UDP或者不是TCP服务器需要输入连接地址
-                if (!isTCP || !isServer) {
+                if (!isTCP || true != isServer) {
                     Text(text = "请输入语音服务器地址")
                     TextField(
                         value = ip,
@@ -289,7 +292,6 @@ class AudioChatManager(
         if(!tcp){ //UDP
             // 初始化接收端：绑定到指定端口
             receiveSocket = DatagramSocket(portNumber)
-            isUDPConnect = true
         }else { //TCP
             CoroutineScope(Dispatchers.IO).launch {
                 try {
@@ -356,7 +358,7 @@ class AudioChatManager(
         reconnectAttempts++
 
         //TCP客户端
-        if(!isServer) {
+        if(true!=isServer) {
             CoroutineScope(Dispatchers.IO).launch {
                 try {
                     withContext(Dispatchers.Main) {
@@ -380,7 +382,8 @@ class AudioChatManager(
                     startReconnect(onReconnectSuccess)
                 }
             }
-        }else{//TCP服务端
+        }
+        if(false!=isServer){//TCP服务端
             CoroutineScope(Dispatchers.IO).launch {
                 try {
                     withContext(Dispatchers.Main) {
@@ -429,6 +432,7 @@ class AudioChatManager(
                 // 初始化发送端（系统会随机分配本地端口）
                 sendSocket = DatagramSocket()
                 udpConnectionStatus = "UDP has connected"
+                isUDPConnect = true
                 println("UDP Socket 已初始化：发送端 ${sendSocket?.localPort}，接收端绑定在端口 $portNumber")
             }
             else{//TCP
@@ -549,24 +553,33 @@ class AudioChatManager(
 
         // 在协程中读取录音数据并发送
         CoroutineScope(Dispatchers.IO).launch {
-            val buffer = ByteArray(bufferSize)
+            val frameByteSize = frameSize * 2   // 录音协程：每次确保读到完整一帧数据再发送
+            val buffer = ByteArray(frameByteSize)
             while (isRecording) {
-                val bytesRead = audioRecord?.read(buffer, 0, buffer.size) ?: 0
+                var offset = 0
+                while (offset < frameByteSize) {
+                    val bytesRead = audioRecord?.read(buffer, offset, frameByteSize - offset) ?: 0
+                    if (bytesRead <= 0) break
+                    offset += bytesRead
+                }
                 //如果没开启录音则不发送
                 if(!isSendRecording) continue
-                if (bytesRead > 0) {
-                    // 将 byte[] 转为 short[]（16位 PCM）
-                    val shortCount = bytesRead / 2
+                if (offset == frameByteSize) {
+                    // 发送完整一帧数据
+                    val shortCount = frameByteSize / 2
                     val pcmShortArray = ShortArray(shortCount)
                     ByteBuffer.wrap(buffer).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(pcmShortArray)
                     // 调用 native 方法进行编码
                     val encodedData = encodeAudio(pcmShortArray)
                     // 发送编码后的数据
                     sendAudioData(encodedData)
+                }
+
+//                if (bytesRead > 0) {
 //                    // 复制有效数据并发送
 //                    val dataToSend = buffer.copyOf(bytesRead)
 //                    sendAudioData(dataToSend)
-                }
+//                }
             }
             withContext(NonCancellable) {
                 try {
@@ -632,6 +645,7 @@ class AudioChatManager(
             while (isPlaying) {
                 if(isPause) continue
                 val receivedData = receiveFromNetwork(true)        //TCP读取数据线程
+                //println("tcp-receivedData: $receivedData")
                 if (receivedData != null && receivedData.isNotEmpty()) {
                     try {
                         // 解码得到 PCM 数据（short[]）
@@ -725,16 +739,22 @@ class AudioChatManager(
                 return
             }
             try {
+                // 内层封装：添加 2 字节长度头
+                val innerHeader = ByteArray(2)
+                innerHeader[0] = ((data.size shr 8) and 0xFF).toByte()
+                innerHeader[1] = (data.size and 0xFF).toByte()
+                val packetData = innerHeader + data
                 // 将 ip 与 port 转为目标地址
                 val portNumber = port.toIntOrNull()!!
                 val address = InetAddress.getByName(ip)
-                val packet = DatagramPacket(data, data.size, address, portNumber)
+                val packet = DatagramPacket(packetData, packetData.size, address, portNumber)
                 sendSocket?.send(packet)
                 //println("发送音频数据，大小: ${data.size}")
             } catch (e: Exception) {
                 e.printStackTrace()
             }
-        }else{//TCP
+        }
+        else{//TCP
             if (!isConnect || writer == null) {
                 println("当前未连接，无法发送消息")
                 isSendRecording = false
@@ -744,7 +764,17 @@ class AudioChatManager(
                 return
             }
             try{
-                writer?.write(data)
+                // 内层封装
+                val innerHeader = ByteArray(2)
+                innerHeader[0] = ((data.size shr 8) and 0xFF).toByte()
+                innerHeader[1] = (data.size and 0xFF).toByte()
+                val innerPacket = innerHeader + data
+                // 外层封装：添加整个内层包的长度头
+                val outerHeader = ByteArray(2)
+                outerHeader[0] = ((innerPacket.size shr 8) and 0xFF).toByte()
+                outerHeader[1] = (innerPacket.size and 0xFF).toByte()
+                writer?.write(outerHeader)
+                writer?.write(innerPacket)
                 writer?.flush()
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -758,82 +788,71 @@ class AudioChatManager(
     }
 
     /**
-     * 从网络接收数据，并返回接收到的音频数据（原始 PCM 数据）
-     * 如果需要，可在此处对数据进行解码
-     * 要求：在调用 startAudioPlay() 前必须调用 connect() 初始化 receiveSocket
+     * 读取 TCP 数据包：
+     * 先读取外层 2 字节长度头，再读取对应长度的内层包（格式：[内层长度头 + 数据]）
+     */
+    private fun readTcpData(): ByteArray? {
+        try {
+            val outerHeader = ByteArray(2)
+            val headerBytes = reader?.read(outerHeader) ?: return null
+            //println("headerBytes: $headerBytes")
+            if (headerBytes != 2) return null
+            val outerLength = ((outerHeader[0].toInt() and 0xFF) shl 8) or (outerHeader[1].toInt() and 0xFF)
+            //println("头部长度：$outerLength")
+            val innerPacket = ByteArray(outerLength)
+            var offset = 0
+            while (offset < outerLength) {
+                val read = reader?.read(innerPacket, offset, outerLength - offset) ?: 0
+                if (read <= 0) break
+                offset += read
+            }
+            //println("innerPacket: $innerPacket")
+            return if (offset == outerLength) innerPacket else null
+        } catch (e: Exception) {
+            return null
+        }
+    }
+
+    // 读取 UDP 数据包
+    private fun readUdpData(): ByteArray? {
+        try {
+            if (receiveSocket == null) return null
+            val buffer = ByteArray(bufferSize)
+            val packet = DatagramPacket(buffer, buffer.size)
+            receiveSocket?.receive(packet)
+            return packet.data.copyOf(packet.length)
+        } catch (e: Exception) {
+            return null
+        }
+    }
+
+    /**
+     * 根据协议接收数据，并解析内层 2 字节长度头获得实际数据内容
      */
     private fun receiveFromNetwork(tcp: Boolean): ByteArray? {
-        //同时接收两个数据，哪个收到数据更多就返回哪个数据
-        if (!tcp){ //UDP
-            if (receiveSocket == null) {
-                println("receiveSocket 尚未初始化，请先调用 connect()")
-                return null
-            }
-            return try {
-                val buffer = ByteArray(bufferSize)
-                val packet = DatagramPacket(buffer, buffer.size)
-                // 此方法会阻塞直到数据到达
-                receiveSocket?.receive(packet)
-                // 返回真正接收到的数据（去除缓冲区中无效部分）
-                packet.data.copyOf(packet.length)
-            } catch (e: Exception) {
-                e.printStackTrace()
-                null
-            }
-        }else{ //TCP
-            if (!isConnect || reader == null) {
-                //println("当前未连接，无法接收消息")
-                return null
-            }
-            return try{
-                val buffer = ByteArray(bufferSize)
-                // 此方法会阻塞直到数据到达
-                val bytesRead = reader?.read(buffer) ?: 0
-                // 返回真正接收到的数据（去除缓冲区中无效部分）【需改】
-                buffer
-            } catch (e: SocketTimeoutException){
-                //忽略
-                null
-            } catch (e: Exception) { //主要用来抓取SocketTimeoutException，以尝试重连
-                e.printStackTrace()
-                //重连逻辑写在发送端
-                isConnect = false
-                isSendRecording = false
-                connectionStatus = "Connection closed."
-//                //断连之后自动重试连接
-//                startReconnect { }
-                null
-            }
+        val rawData = if (tcp) readTcpData() else readUdpData()
+        return rawData?.let {
+            if (it.size < 2) return null
+            val innerLength = ((it[0].toInt() and 0xFF) shl 8) or (it[1].toInt() and 0xFF)
+            if (it.size < 2 + innerLength) return null
+            it.copyOfRange(2, 2 + innerLength)
         }
     }
 
     fun onDestroy() {
         destroyOpus()  // 对应 JNI 中的释放方法
-
         // 停止录音
         isRecording = false
         isSendRecording = false
-        audioRecord?.let { record ->
-            try {
-                record.stop()
-            } catch (e: Exception) {
-                //e.printStackTrace()
-            }
-            record.release()
-        }
+        audioRecord?.let { try { it.stop() } catch (e: Exception) {} ; it.release() }
         audioRecord = null
 
         // 停止播放
         isPlaying = false
-        audioTrack?.let { track ->
-            try {
-                track.stop()
-            } catch (e: Exception) {
-                //e.printStackTrace()
-            }
-            track.release()
-        }
+        audioTrack?.let { try { it.stop() } catch (e: Exception) {} ; it.release() }
+        speakerAudioTrack?.let { try { it.stop() } catch (e: Exception) {} ; it.release() }
         audioTrack = null
+        speakerAudioTrack = null
 
         // 关闭 UDP Socket
         sendSocket?.close()
