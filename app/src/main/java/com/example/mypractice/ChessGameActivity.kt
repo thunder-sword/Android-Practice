@@ -680,7 +680,7 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
                     )
                     Button(onClick = {
                         showMyChatBubble = tcpConnector?.messageToSend ?: ""
-                        tcpConnector?.send("chatMessage: ${tcpConnector.messageToSend}", current)
+                        tcpConnector?.send("chatMessage: ${tcpConnector.messageToSend}")
                     }) {
                         Text("发送")
                     }

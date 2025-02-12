@@ -485,7 +485,7 @@ class GameManager(
 
     //作用：发送信息给远程主机
     private fun sendMessage(message: String){
-        tcpConnector!!.send(message, current)
+        tcpConnector!!.send(message)
     }
 
     //作用：处理接收来的指令
@@ -627,11 +627,18 @@ class GameManager(
                             tcpConnector?.startReconnect{
                                 //println("已执行成功回连成功回调函数")
                                 Toast.makeText(current, "回连成功", Toast.LENGTH_SHORT).show()
+                                blockQueryString = ""
                                 blockString = "等待服务器回复棋局..."
-                                //请求棋局
-                                sendMessage("query: chessBoard")
-                                //请求当前玩家
-                                sendMessage("query: currentPlayer")
+                                //启动一个协程不断发送请求
+                                CoroutineScope(Dispatchers.IO).launch {
+                                    while("等待服务器回复棋局..." == blockString){
+                                        //请求棋局
+                                        sendMessage("query: chessBoard")
+                                        //请求当前玩家
+                                        sendMessage("query: currentPlayer")
+                                        delay(300)
+                                    }
+                                }
                             }
                             onBlockQueryYes = {
                                 Toast.makeText(current, "已结束游戏", Toast.LENGTH_SHORT).show()
@@ -802,10 +809,16 @@ class GameManager(
                 localPlayer = 1
                 //等待服务器初始化房间
                 blockString = "等待服务器创建棋局..."
-                //请求棋局
-                sendMessage("query: chessBoard")
-                //请求当前玩家
-                sendMessage("query: currentPlayer")
+                //启动一个协程不断发送请求
+                CoroutineScope(Dispatchers.IO).launch {
+                    while("等待服务器创建棋局..." == blockString){
+                        //请求棋局
+                        sendMessage("query: chessBoard")
+                        //请求当前玩家
+                        sendMessage("query: currentPlayer")
+                        delay(300)
+                    }
+                }
             }
         } else {
             println("Game is already running.")

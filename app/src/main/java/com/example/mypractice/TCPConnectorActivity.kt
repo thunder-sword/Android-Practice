@@ -95,18 +95,16 @@ open class TCPConnector{
     var onMessageReceived: ((String) -> Unit)? = null
 
     //作用：发送消息
-    fun send(message: String, current: Context){
+    fun send(message: String){
         //println("正要发送信息：$message")
         // 发送前检测socket是否处于连接状态
-        if (!isConnect || null == socket || socket?.isClosed == true || socket?.isInputShutdown == true || socket?.isOutputShutdown == true) {
-            isConnect = false
-            Toast.makeText(current, "当前未连接，无法发送", Toast.LENGTH_SHORT).show()
+        if (!isConnect) {
             println("当前未连接，无法发送消息")
             return
         }
 
         if (message.isBlank()) {
-            Toast.makeText(current, "发送内容不能为空", Toast.LENGTH_SHORT).show()
+            println("发送内容不能为空")
             return
         }
 
@@ -394,7 +392,7 @@ fun TCPClientUI(tcpConnector: TCPConnector) {
         }
 
         Button(onClick = {
-            tcpConnector.send(tcpConnector.messageToSend, current)
+            tcpConnector.send(tcpConnector.messageToSend)
         }) {
             Text("Send")
         }

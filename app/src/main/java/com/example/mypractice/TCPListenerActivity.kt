@@ -297,7 +297,7 @@ fun TCPServerUI(tcpListener: TCPListener) {
         }
 
         Button(onClick = {
-            tcpListener.send(tcpListener.messageToSend, current)
+            tcpListener.send(tcpListener.messageToSend)
         }) {
             Text("Send")
         }
