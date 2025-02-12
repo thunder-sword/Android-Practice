@@ -430,7 +430,7 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .zIndex(2f)
+                .zIndex(3f)
                 .pointerInteropFilter { false } // 返回 false 表示该层不消费事件，点击事件可以往下传
         ) {
             //不是本地时
@@ -480,6 +480,69 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
                             }
                         }
                     }
+                }
+            }
+        }
+
+        //象棋棋盘
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(2f),
+            contentAlignment = Alignment.Center
+        ){
+            //象棋游戏主容器
+            Row(
+                modifier = Modifier
+                    //.fillMaxSize()
+                    .graphicsLayer {
+                        // 当前玩家不是玩家1，则垂直对角翻转180度
+                        if (0 != gameManager.localPlayer) {
+                            scaleX = -1f
+                            scaleY = -1f
+                        }
+                    },
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // 绘制棋盘
+                Canvas(
+                    modifier = Modifier
+                        .size(width = chessBoardWidth, height = chessBoardHeight)
+                        .pointerInput(Unit) {
+                            detectTapGestures { offset ->
+                                gameManager.handleTap(offset)
+                            }
+                        }
+                ) {
+                    //绘制棋盘
+                    gameManager.chessBoard.initialize(size)
+                    gameManager.chessBoard.draw(this, imageLoader = viewModel.imageLoader)
+
+                    // 绘制棋子图片
+                    for (piece in gameManager.alivePieces) {
+                        //黑子的正面棋子需要旋转180度
+                        val isRotate: Boolean = (piece.isFront && PieceCamp.Black == piece.camp)
+                        piece.draw(
+                            this,
+                            imageLoader = viewModel.imageLoader,
+                            borderLeft = gameManager.chessBoard.borderLeft,
+                            borderTop = gameManager.chessBoard.borderTop,
+                            cellWidth = gameManager.chessBoard.cellWidth,
+                            cellHeight = gameManager.chessBoard.cellHeight,
+                            isRotate = isRotate
+                        )
+                    }
+
+                    // 绘制可到达位置提示格
+                    gameManager.drawBox(
+                        this,
+                        imageLoader = viewModel.imageLoader,
+                        borderLeft = gameManager.chessBoard.borderLeft,
+                        borderTop = gameManager.chessBoard.borderTop,
+                        cellWidth = gameManager.chessBoard.cellWidth,
+                        cellHeight = gameManager.chessBoard.cellHeight
+                    )
                 }
             }
         }
@@ -536,61 +599,6 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
                                 + if (gameManager.localPlayer != gameManager.currentPlayer) "【走】" else "",
                         color = if (0 == gameManager.localPlayer) Color.Blue else Color.Red,
                         fontSize = 30.sp
-                    )
-                }
-            }
-
-            //象棋游戏主容器
-            Row(
-                modifier = Modifier
-                    //.fillMaxSize()
-                    .graphicsLayer {
-                        // 当前玩家不是玩家1，则垂直对角翻转180度
-                        if (0 != gameManager.localPlayer) {
-                            scaleX = -1f
-                            scaleY = -1f
-                        }
-                    },
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // 绘制棋盘
-                Canvas(
-                    modifier = Modifier
-                        .size(width = chessBoardWidth, height = chessBoardHeight)
-                        .pointerInput(Unit) {
-                            detectTapGestures { offset ->
-                                gameManager.handleTap(offset)
-                            }
-                        }
-                ) {
-                    //绘制棋盘
-                    gameManager.chessBoard.initialize(size)
-                    gameManager.chessBoard.draw(this, imageLoader = viewModel.imageLoader)
-
-                    // 绘制棋子图片
-                    for (piece in gameManager.alivePieces) {
-                        //黑子的正面棋子需要旋转180度
-                        val isRotate: Boolean = (piece.isFront && PieceCamp.Black == piece.camp)
-                        piece.draw(
-                            this,
-                            imageLoader = viewModel.imageLoader,
-                            borderLeft = gameManager.chessBoard.borderLeft,
-                            borderTop = gameManager.chessBoard.borderTop,
-                            cellWidth = gameManager.chessBoard.cellWidth,
-                            cellHeight = gameManager.chessBoard.cellHeight,
-                            isRotate = isRotate
-                        )
-                    }
-
-                    // 绘制可到达位置提示格
-                    gameManager.drawBox(
-                        this,
-                        imageLoader = viewModel.imageLoader,
-                        borderLeft = gameManager.chessBoard.borderLeft,
-                        borderTop = gameManager.chessBoard.borderTop,
-                        cellWidth = gameManager.chessBoard.cellWidth,
-                        cellHeight = gameManager.chessBoard.cellHeight
                     )
                 }
             }
