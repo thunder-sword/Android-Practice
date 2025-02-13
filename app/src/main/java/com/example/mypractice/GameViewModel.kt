@@ -1,10 +1,34 @@
 package com.example.mypractice
 
 import android.content.Context
+import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+
+//MVI中所有数据都是state
+data class GameStates (
+    val playState: GamePlayState = GamePlayState.Ended,
+    val chatMessage: String = "",
+    val chessBoard: ChessBoard = ChessBoard(),
+    val players: Array<PieceCamp> = PieceCamp.values(),
+    val currentPlayer: Int = 0,
+    val localPlayer: Int = 0,
+    val currentBoard: Array<Array<MutableList<ChessPiece>>> = Array(chessBoard.cols) { Array(chessBoard.rows) { mutableListOf() } },
+
+){
+    //当前存活的棋子列表
+    val alivePieces: MutableList<ChessPiece>
+        get() = currentBoard.flatten()  // 展平棋盘
+            .flatten()  // 展平所有棋子的列表
+            .toMutableStateList()
+    //.groupBy { it.camp }  // 根据阵营分组
+    //当前可触发的棋子列表（每叠棋子最上面那个）
+    private val canTapPieces: List<ChessPiece>
+        get() = currentBoard.flatten()  //展平棋盘
+            .mapNotNull { it.lastOrNull() }       //只取最后一个棋子
+}
 
 class GameViewModel(context: Context) : ViewModel() {
     val imageLoader = ImageLoader(context)

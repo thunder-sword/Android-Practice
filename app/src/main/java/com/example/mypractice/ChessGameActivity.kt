@@ -297,7 +297,7 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
 
     // 监听 gameManager.currentState 的状态变化
     LaunchedEffect(gameManager.currentState) {
-        if (gameManager.currentState == GameState.Ended) {
+        if (gameManager.currentState == GamePlayState.Ended) {
             gameManager.blockQueryString = "是否要重新开始游戏？"
             gameManager.onBlockQueryYes = {
                 gameManager.tryRestartGame()

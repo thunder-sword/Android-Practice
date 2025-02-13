@@ -19,7 +19,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlin.math.sqrt
 
 //游戏状态枚举
-enum class GameState {
+enum class GamePlayState {
     Running,
     Ended
 }
@@ -69,7 +69,7 @@ class GameManager(
     }
 
     //当前游戏状态
-    var currentState by mutableStateOf(GameState.Ended)
+    var currentState by mutableStateOf(GamePlayState.Ended)
         private set
 
     //block提示信息
@@ -104,7 +104,7 @@ class GameManager(
             .toMutableStateList()
             //.groupBy { it.camp }  // 根据阵营分组
     //当前可触发的棋子列表（每叠棋子最上面那个）
-            private val canTapPieces: List<ChessPiece>
+    private val canTapPieces: List<ChessPiece>
         get() = currentBoard.flatten()  //展平棋盘
             .mapNotNull { it.lastOrNull() }       //只取最后一个棋子
 
@@ -620,7 +620,7 @@ class GameManager(
                     //当遇到网络断连的状况，客户端自动请求重连，服务端选择是否等待重连
                     "Connection closed." -> {
                         //如果游戏已结束则不用管
-                        if(GameState.Ended == currentState)
+                        if(GamePlayState.Ended == currentState)
                             return
                         if(OnlineState.Client == onlineState){
                             blockQueryString = "与服务器连接断开，正在尝试回连，停止连接？"
@@ -781,8 +781,8 @@ class GameManager(
 //        }
 //        println("******************************[Stack End]******************************")
 
-        if (currentState == GameState.Ended) {
-            currentState = GameState.Running
+        if (currentState == GamePlayState.Ended) {
+            currentState = GamePlayState.Running
             println("Game started! Current state: $currentState")
 
             //不是客户端则需要初始化棋盘
@@ -827,8 +827,8 @@ class GameManager(
     }
 
     private fun endGame() {
-        if (currentState == GameState.Running) {
-            currentState = GameState.Ended
+        if (currentState == GamePlayState.Running) {
+            currentState = GamePlayState.Ended
             println("Game ended! Current state: $currentState")
         } else {
             println("Game is already ended.")
