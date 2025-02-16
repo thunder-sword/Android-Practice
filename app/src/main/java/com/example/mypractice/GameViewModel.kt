@@ -2,36 +2,87 @@ package com.example.mypractice
 
 import android.content.Context
 import androidx.compose.runtime.toMutableStateList
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.*
 
-//MVI中所有数据都是state
-data class GameStates (
-    val playState: GamePlayState = GamePlayState.Ended,
-    val chatMessage: String = "",
-    val chessBoard: ChessBoard = ChessBoard(),
-    val players: Array<PieceCamp> = PieceCamp.values(),
-    val currentPlayer: Int = 0,
-    val localPlayer: Int = 0,
-    val currentBoard: Array<Array<MutableList<ChessPiece>>> = Array(chessBoard.cols) { Array(chessBoard.rows) { mutableListOf() } },
+//标识UI状态（Model）的接口
+interface IUiState
 
-){
-    //当前存活的棋子列表
-    val alivePieces: MutableList<ChessPiece>
-        get() = currentBoard.flatten()  // 展平棋盘
-            .flatten()  // 展平所有棋子的列表
-            .toMutableStateList()
-    //.groupBy { it.camp }  // 根据阵营分组
-    //当前可触发的棋子列表（每叠棋子最上面那个）
-    private val canTapPieces: List<ChessPiece>
-        get() = currentBoard.flatten()  //展平棋盘
-            .mapNotNull { it.lastOrNull() }       //只取最后一个棋子
+//标识用户意图（Intent）的接口
+interface IUiIntent
+
+//定义游戏状态
+sealed class GameUiState: IUiState{
+    //未开始游戏状态
+    object Idle: GameUiState()
+
+    //游戏结束状态
+    object Ended: GameUiState()
+
+    //游戏开始状态
+    data class Running(
+        val chessBoard: ChessBoard,
+        val currentPlayer: Int,
+        val localPlayer: Int,
+        val networkState: NetworkState = NetworkState.Normal,
+        val players: Array<PieceCamp>,
+        val currentBoard: Array<Array<MutableList<ChessPiece>>>
+    ): GameUiState(){
+        //当前存活的棋子列表
+        val alivePieces: MutableList<ChessPiece>
+            get() = currentBoard.flatten()  // 展平棋盘
+                .flatten()  // 展平所有棋子的列表
+                .toMutableStateList()
+        //.groupBy { it.camp }  // 根据阵营分组
+        //当前可触发的棋子列表（每叠棋子最上面那个）
+        private val canTapPieces: List<ChessPiece>
+            get() = currentBoard.flatten()  //展平棋盘
+                .mapNotNull { it.lastOrNull() }       //只取最后一个棋子
+
+        // 定义网络/远程状态的子类型
+        sealed class NetworkState {
+            // 正常运行状态（无等待）
+            object Normal : NetworkState()
+            // 等待网络重连
+            object WaitingForReconnect : NetworkState()
+            // 等待远程主机回复
+            object WaitingForRemoteResponse : NetworkState()
+        }
+    }
 }
 
+//定义用户意图
+sealed class GameUiIntent: IUiIntent{
+    //点击开始游戏
+    object StartGame: GameUiIntent()
+
+    //点击悔棋
+    object tryBackStep: GameUiIntent()
+
+    //点击重新开始游戏
+    object tryRestartGame: GameUiIntent()
+
+    //点击棋盘
+    data class TapBoard(val offset: Offset): GameUiIntent()
+}
+
+//游戏ViewModel
 class GameViewModel(context: Context) : ViewModel() {
+    //初始化图片加载器
     val imageLoader = ImageLoader(context)
+
+    //初始化状态为Idle
+    private val _uiState = MutableStateFlow<GameUiState>(GameUiState.Idle)
+    val uiState: StateFlow<GameUiState> = _uiState.asStateFlow()
+
+    //用Channel来接收用户意图
+    private val _uiIntent = Channel<GameUiIntent>(Channel.UNLIMITED)
+    val uiIntent: Flow<GameUiIntent> = _uiIntent.receiveAsFlow()
 }
 
 //传入context参数
