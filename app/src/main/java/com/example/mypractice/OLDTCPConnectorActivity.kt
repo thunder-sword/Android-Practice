@@ -35,6 +35,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
+import com.example.mypractice.chessboard.GameViewModel
+import com.example.mypractice.chessboard.GameViewModelFactory
 import com.example.mypractice.ui.theme.MyPracticeTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -48,7 +50,7 @@ import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.SocketTimeoutException
 
-class TCPConnectorActivity : ComponentActivity() {
+class OLDTCPConnectorActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -281,7 +283,7 @@ fun ConnectorMainScreen(viewModel: GameViewModel) {
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            TCPClientUI(tcpConnector)
+            OLDTCPClientUI(tcpConnector)
         }
     } else {
         // 用于控制弹窗是否显示
@@ -308,7 +310,7 @@ fun ConnectorMainScreen(viewModel: GameViewModel) {
 }
 
 @Composable
-fun TCPClientUI(tcpConnector: TCPConnector) {
+fun OLDTCPClientUI(tcpConnector: TCPConnector) {
     val current = LocalContext.current
 
     Column(

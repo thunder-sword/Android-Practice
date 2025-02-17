@@ -6,6 +6,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import android.graphics.Matrix
 import android.graphics.Paint
+import com.example.mypractice.utils.ImageLoader
 import kotlin.math.sqrt
 
 //棋子阵营枚举

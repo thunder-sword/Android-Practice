@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.mypractice.ui.theme.MyPracticeTheme
+import com.example.mypractice.utils.TCPConnectorActivity
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -27,9 +28,10 @@ class MainActivity : ComponentActivity() {
                     ChessGameMainScreen {
                         x -> when(x) {
                             1 -> startActivity(Intent(this, TCPListenerActivity::class.java))
-                            2 -> startActivity(Intent(this, TCPConnectorActivity::class.java))
+                            2 -> startActivity(Intent(this, OLDTCPConnectorActivity::class.java))
                             3 -> startActivity(Intent(this, ChessGameActivity::class.java))
                             4 -> startActivity(Intent(this, ChatActivity::class.java))
+                            5 -> startActivity(Intent(this, TCPConnectorActivity::class.java))
                         else -> Toast.makeText(this@MainActivity, "未知的跳转页面", Toast.LENGTH_SHORT).show()
                         }
                     }
@@ -79,6 +81,14 @@ fun ChessGameMainScreen(startUp: (Int) -> Unit) {
                 }
             ) {
                 Text("聊天室")
+            }
+
+            Button(
+                onClick = {
+                    startUp(5)
+                }
+            ) {
+                Text("MVI客户端")
             }
         }
     }

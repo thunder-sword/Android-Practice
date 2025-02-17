@@ -51,6 +51,8 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ViewModelProvider
+import com.example.mypractice.chessboard.GameViewModel
+import com.example.mypractice.chessboard.GameViewModelFactory
 import com.example.mypractice.ui.theme.MyPracticeTheme
 import com.example.mypractice.ui.theme.chessBoardColor
 import kotlinx.coroutines.delay
