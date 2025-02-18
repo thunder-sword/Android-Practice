@@ -35,14 +35,14 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
 import com.example.mypractice.ui.theme.MyPracticeTheme
 
-class TCPConnectorActivity: ComponentActivity() {
+class TCPListenerActivity: ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         // 使用 ViewModelProvider 获取实例
         val viewModel = ViewModelProvider(
             this
-        )[TCPConnectorViewModel::class.java]
+        )[TCPListenerViewModel::class.java]
 
         setContent {
             MyPracticeTheme {
@@ -50,7 +50,7 @@ class TCPConnectorActivity: ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colors.background
                 ) {
-                    TCPClientUI(viewModel)
+                    TCPServerUI(viewModel)
                 }
             }
         }
@@ -58,12 +58,11 @@ class TCPConnectorActivity: ComponentActivity() {
 }
 
 @Composable
-fun TCPClientUI(viewModel: TCPConnectorViewModel) {
+fun TCPServerUI(viewModel: TCPListenerViewModel) {
     val current = LocalContext.current
     val state by viewModel.uiState.collectAsState()
 
     // 本地只管理用户输入，不再管理连接状态，这部分统一由 ViewModel 状态提供
-    var ip by rememberSaveable { mutableStateOf("") }
     var port by rememberSaveable { mutableStateOf("4399") }
     var messageToSend by rememberSaveable { mutableStateOf("") }
 
@@ -74,16 +73,7 @@ fun TCPClientUI(viewModel: TCPConnectorViewModel) {
         verticalArrangement = Arrangement.spacedBy(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // 输入 IP 与端口
-        TextField(
-            value = ip,
-            onValueChange = { ip = it },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(8.dp),
-            label = { Text("输入IP地址") }
-        )
-
+        //输入监听端口
         TextField(
             value = port,
             onValueChange = { port = it },
@@ -98,18 +88,18 @@ fun TCPClientUI(viewModel: TCPConnectorViewModel) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = {
                 val portNumber = port.toIntOrNull()
-                if (ip.isBlank() || portNumber == null) {
-                    Toast.makeText(current, "非法的 IP 或端口", Toast.LENGTH_SHORT).show()
+                if (portNumber == null) {
+                    Toast.makeText(current, "非法的端口", Toast.LENGTH_SHORT).show()
                     return@Button
                 }
-                viewModel.sendUiIntent(TCPConnectionIntent.Connect(ip, portNumber))
+                viewModel.sendUiIntent(TCPListenerIntent.StartListening(portNumber))
             }) {
-                Text("连接")
+                Text("监听")
             }
             Button(onClick = {
-                viewModel.sendUiIntent(TCPConnectionIntent.Disconnect)
+                viewModel.sendUiIntent(TCPListenerIntent.StopListening)
             }) {
-                Text("断开连接")
+                Text("停止监听")
             }
         }
 
@@ -121,12 +111,11 @@ fun TCPClientUI(viewModel: TCPConnectorViewModel) {
             SelectionContainer {
                 Text(
                     text = when (state) {
-                        is TCPConnectionState.Connected -> "网络连接成功"
-                        TCPConnectionState.Connecting -> "正在尝试连接"
-                        is TCPConnectionState.ConnectionFailed -> "连接失败: ${(state as TCPConnectionState.ConnectionFailed).error}"
-                        TCPConnectionState.Disconnected -> "已断开连接"
-                        TCPConnectionState.Idle -> "当前未连接"
-                        is TCPConnectionState.Reconnecting -> "连接断开，正在回连，尝试次数: ${(state as TCPConnectionState.Reconnecting).attempt}"
+                        is TCPListenerState.Connected -> (state as TCPListenerState.Connected).info
+                        is TCPListenerState.Error -> (state as TCPListenerState.Error).message
+                        TCPListenerState.Idle -> "服务未启动"
+                        is TCPListenerState.Listening -> (state as TCPListenerState.Listening).info
+                        TCPListenerState.Stopped -> "服务已停止"
                     },
                     modifier = Modifier.padding(8.dp)
                 )
@@ -135,8 +124,8 @@ fun TCPClientUI(viewModel: TCPConnectorViewModel) {
 
         // 如果处于 Connected 状态，则显示消息内容
         val messagesScrollState = rememberScrollState()
-        if (state is TCPConnectionState.Connected) {
-            val connectedState = state as TCPConnectionState.Connected
+        if (state is TCPListenerState.Connected) {
+            val connectedState = state as TCPListenerState.Connected
             // 显示接收到的消息
             Box(
                 modifier = Modifier
@@ -169,7 +158,7 @@ fun TCPClientUI(viewModel: TCPConnectorViewModel) {
             )
             Button(onClick = {
                 if (messageToSend.isNotBlank()) {
-                    viewModel.sendUiIntent(TCPConnectionIntent.SendMessage(messageToSend))
+                    viewModel.sendUiIntent(TCPListenerIntent.SendMessage(messageToSend))
                     messageToSend = ""  // 发送后清空输入框
                 }
             }) {
