@@ -11,7 +11,6 @@ import java.net.NetworkInterface
 import java.net.ServerSocket
 import java.net.Socket
 
-// ================== TCP 服务端相关状态和意图 ==================
 // TCP 服务端状态
 sealed class TCPListenerState : IUiState {
     object Idle : TCPListenerState()           // 初始状态
@@ -67,6 +66,9 @@ class TCPListenerViewModel : BaseViewModel<TCPListenerState, TCPListenerIntent>(
 
     // 启动监听
     private fun startListening(port: Int) {
+        //监听前先解绑原监听
+        stopListening()
+
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 serverSocket = ServerSocket(port, 0)
@@ -109,6 +111,7 @@ class TCPListenerViewModel : BaseViewModel<TCPListenerState, TCPListenerIntent>(
                 serverSocket?.close()
             } catch (e: Exception) {
                 // 记录日志
+                e.printStackTrace()
             } finally {
                 updateState { TCPListenerState.Stopped }
             }

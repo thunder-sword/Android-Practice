@@ -66,6 +66,9 @@ class TCPConnectorViewModel : BaseViewModel<TCPConnectionState, TCPConnectionInt
 
     // 发起连接
     private fun connect(ip: String, port: Int) {
+        //连接前先断开旧连接
+        disconnect()
+
         currentIp = ip
         currentPort = port
         viewModelScope.launch(Dispatchers.IO) {
@@ -96,6 +99,7 @@ class TCPConnectorViewModel : BaseViewModel<TCPConnectionState, TCPConnectionInt
                 reader?.close()
             } catch (e: Exception) {
                 // 这里可以记录日志
+                e.printStackTrace()
             } finally {
                 socket = null
                 writer = null
@@ -169,7 +173,7 @@ class TCPConnectorViewModel : BaseViewModel<TCPConnectionState, TCPConnectionInt
                             currentState.ip,
                             currentState.port,
                             line,
-                            currentState.info+"\n$line"
+                            currentState.info+"\nReceived: $line"
                         ) }
                     }
                 }
