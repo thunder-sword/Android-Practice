@@ -58,12 +58,68 @@ class TCPListenerActivity: ComponentActivity() {
 }
 
 @Composable
-fun TCPServerUI(viewModel: TCPListenerViewModel) {
+fun TCPServerLinkUI(viewModel: TCPListenerViewModel) {
     val current = LocalContext.current
     val state by viewModel.uiState.collectAsState()
 
-    // 本地只管理用户输入，不再管理连接状态，这部分统一由 ViewModel 状态提供
     var port by rememberSaveable { mutableStateOf("4399") }
+
+    //输入监听端口
+    TextField(
+        value = port,
+        onValueChange = { port = it },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(8.dp),
+        keyboardOptions = KeyboardOptions.Default.copy(keyboardType = KeyboardType.Number),
+        label = { Text("输入端口") }
+    )
+
+    // 连接/断开操作
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(onClick = {
+            val portNumber = port.toIntOrNull()
+            if (portNumber == null) {
+                Toast.makeText(current, "非法的端口", Toast.LENGTH_SHORT).show()
+                return@Button
+            }
+            viewModel.sendUiIntent(TCPListenerIntent.StartListening(portNumber))
+        }) {
+            Text("监听")
+        }
+        Button(onClick = {
+            viewModel.sendUiIntent(TCPListenerIntent.StopListening)
+        }) {
+            Text("停止监听")
+        }
+    }
+
+    // 显示当前连接状态（直接从 state 中取）
+    Box(
+        modifier = Modifier
+            .verticalScroll(rememberScrollState())
+    ) {
+        SelectionContainer {
+            Text(
+                text = when (state) {
+                    is TCPListenerState.Connected -> (state as TCPListenerState.Connected).info
+                    is TCPListenerState.Error -> (state as TCPListenerState.Error).message
+                    TCPListenerState.Idle -> "服务未启动"
+                    is TCPListenerState.Listening -> (state as TCPListenerState.Listening).info
+                    TCPListenerState.Stopped -> "服务已停止"
+                },
+                modifier = Modifier.padding(8.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun TCPServerUI(viewModel: TCPListenerViewModel) {
+    //val current = LocalContext.current
+    val state by viewModel.uiState.collectAsState()
+
+    // 本地只管理用户输入，不再管理连接状态，这部分统一由 ViewModel 状态提供
     var messageToSend by rememberSaveable { mutableStateOf("") }
 
     Column(
@@ -73,54 +129,7 @@ fun TCPServerUI(viewModel: TCPListenerViewModel) {
         verticalArrangement = Arrangement.spacedBy(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        //输入监听端口
-        TextField(
-            value = port,
-            onValueChange = { port = it },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(8.dp),
-            keyboardOptions = KeyboardOptions.Default.copy(keyboardType = KeyboardType.Number),
-            label = { Text("输入端口") }
-        )
-
-        // 连接/断开操作
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = {
-                val portNumber = port.toIntOrNull()
-                if (portNumber == null) {
-                    Toast.makeText(current, "非法的端口", Toast.LENGTH_SHORT).show()
-                    return@Button
-                }
-                viewModel.sendUiIntent(TCPListenerIntent.StartListening(portNumber))
-            }) {
-                Text("监听")
-            }
-            Button(onClick = {
-                viewModel.sendUiIntent(TCPListenerIntent.StopListening)
-            }) {
-                Text("停止监听")
-            }
-        }
-
-        // 显示当前连接状态（直接从 state 中取）
-        Box(
-            modifier = Modifier
-                .verticalScroll(rememberScrollState())
-        ) {
-            SelectionContainer {
-                Text(
-                    text = when (state) {
-                        is TCPListenerState.Connected -> (state as TCPListenerState.Connected).info
-                        is TCPListenerState.Error -> (state as TCPListenerState.Error).message
-                        TCPListenerState.Idle -> "服务未启动"
-                        is TCPListenerState.Listening -> (state as TCPListenerState.Listening).info
-                        TCPListenerState.Stopped -> "服务已停止"
-                    },
-                    modifier = Modifier.padding(8.dp)
-                )
-            }
-        }
+        TCPServerLinkUI(viewModel)
 
         // 如果处于 Connected 状态，则显示消息内容
         val messagesScrollState = rememberScrollState()

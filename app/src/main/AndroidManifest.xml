@@ -22,6 +22,9 @@
             android:name=".utils.TCPConnectorActivity"
             android:exported="false" />
         <activity
+            android:name=".chat.MessageChatActivity"
+            android:exported="false" />
+        <activity
             android:name=".ChatActivity"
             android:exported="false" />
         <activity

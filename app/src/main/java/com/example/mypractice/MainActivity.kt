@@ -13,6 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.example.mypractice.chat.MessageChatActivity
 import com.example.mypractice.ui.theme.MyPracticeTheme
 import com.example.mypractice.utils.TCPConnectorActivity
 import com.example.mypractice.utils.TCPListenerActivity
@@ -34,6 +35,7 @@ class MainActivity : ComponentActivity() {
                             4 -> startActivity(Intent(this, ChatActivity::class.java))
                             5 -> startActivity(Intent(this, TCPListenerActivity::class.java))
                             6 -> startActivity(Intent(this, TCPConnectorActivity::class.java))
+                            7 -> startActivity(Intent(this, MessageChatActivity::class.java))
                         else -> Toast.makeText(this@MainActivity, "未知的跳转页面", Toast.LENGTH_SHORT).show()
                         }
                     }
@@ -99,6 +101,14 @@ fun ChessGameMainScreen(startUp: (Int) -> Unit) {
                 }
             ) {
                 Text("MVI客户端")
+            }
+
+            Button(
+                onClick = {
+                    startUp(7)
+                }
+            ) {
+                Text("MVI聊天室")
             }
         }
     }

@@ -58,13 +58,79 @@ class TCPConnectorActivity: ComponentActivity() {
 }
 
 @Composable
-fun TCPClientUI(viewModel: TCPConnectorViewModel) {
+fun TCPClientLinkUI(viewModel: TCPConnectorViewModel){
     val current = LocalContext.current
     val state by viewModel.uiState.collectAsState()
 
-    // 本地只管理用户输入，不再管理连接状态，这部分统一由 ViewModel 状态提供
     var ip by rememberSaveable { mutableStateOf("") }
     var port by rememberSaveable { mutableStateOf("4399") }
+
+    // 输入 IP 与端口
+    TextField(
+        value = ip,
+        onValueChange = { ip = it },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(8.dp),
+        label = { Text("输入IP地址") }
+    )
+
+    TextField(
+        value = port,
+        onValueChange = { port = it },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(8.dp),
+        keyboardOptions = KeyboardOptions.Default.copy(keyboardType = KeyboardType.Number),
+        label = { Text("输入端口") }
+    )
+
+    // 连接/断开操作
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(onClick = {
+            val portNumber = port.toIntOrNull()
+            if (ip.isBlank() || portNumber == null) {
+                Toast.makeText(current, "非法的 IP 或端口", Toast.LENGTH_SHORT).show()
+                return@Button
+            }
+            viewModel.sendUiIntent(TCPConnectionIntent.Connect(ip, portNumber))
+        }) {
+            Text("连接")
+        }
+        Button(onClick = {
+            viewModel.sendUiIntent(TCPConnectionIntent.Disconnect)
+        }) {
+            Text("断开连接")
+        }
+    }
+
+    // 显示当前连接状态（直接从 state 中取）
+    Box(
+        modifier = Modifier
+            .verticalScroll(rememberScrollState())
+    ) {
+        SelectionContainer {
+            Text(
+                text = when (state) {
+                    is TCPConnectionState.Connected -> "网络连接成功"
+                    TCPConnectionState.Connecting -> "正在尝试连接"
+                    is TCPConnectionState.ConnectionFailed -> "连接失败: ${(state as TCPConnectionState.ConnectionFailed).error}"
+                    TCPConnectionState.Disconnected -> "已断开连接"
+                    TCPConnectionState.Idle -> "当前未连接"
+                    is TCPConnectionState.Reconnecting -> "连接断开，正在回连，尝试次数: ${(state as TCPConnectionState.Reconnecting).attempt}"
+                },
+                modifier = Modifier.padding(8.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun TCPClientUI(viewModel: TCPConnectorViewModel) {
+    //val current = LocalContext.current
+    val state by viewModel.uiState.collectAsState()
+
+    // 本地只管理用户输入，不再管理连接状态，这部分统一由 ViewModel 状态提供
     var messageToSend by rememberSaveable { mutableStateOf("") }
 
     Column(
@@ -74,64 +140,7 @@ fun TCPClientUI(viewModel: TCPConnectorViewModel) {
         verticalArrangement = Arrangement.spacedBy(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // 输入 IP 与端口
-        TextField(
-            value = ip,
-            onValueChange = { ip = it },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(8.dp),
-            label = { Text("输入IP地址") }
-        )
-
-        TextField(
-            value = port,
-            onValueChange = { port = it },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(8.dp),
-            keyboardOptions = KeyboardOptions.Default.copy(keyboardType = KeyboardType.Number),
-            label = { Text("输入端口") }
-        )
-
-        // 连接/断开操作
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = {
-                val portNumber = port.toIntOrNull()
-                if (ip.isBlank() || portNumber == null) {
-                    Toast.makeText(current, "非法的 IP 或端口", Toast.LENGTH_SHORT).show()
-                    return@Button
-                }
-                viewModel.sendUiIntent(TCPConnectionIntent.Connect(ip, portNumber))
-            }) {
-                Text("连接")
-            }
-            Button(onClick = {
-                viewModel.sendUiIntent(TCPConnectionIntent.Disconnect)
-            }) {
-                Text("断开连接")
-            }
-        }
-
-        // 显示当前连接状态（直接从 state 中取）
-        Box(
-            modifier = Modifier
-                .verticalScroll(rememberScrollState())
-        ) {
-            SelectionContainer {
-                Text(
-                    text = when (state) {
-                        is TCPConnectionState.Connected -> "网络连接成功"
-                        TCPConnectionState.Connecting -> "正在尝试连接"
-                        is TCPConnectionState.ConnectionFailed -> "连接失败: ${(state as TCPConnectionState.ConnectionFailed).error}"
-                        TCPConnectionState.Disconnected -> "已断开连接"
-                        TCPConnectionState.Idle -> "当前未连接"
-                        is TCPConnectionState.Reconnecting -> "连接断开，正在回连，尝试次数: ${(state as TCPConnectionState.Reconnecting).attempt}"
-                    },
-                    modifier = Modifier.padding(8.dp)
-                )
-            }
-        }
+        TCPClientLinkUI(viewModel)
 
         // 如果处于 Connected 状态，则显示消息内容
         val messagesScrollState = rememberScrollState()
