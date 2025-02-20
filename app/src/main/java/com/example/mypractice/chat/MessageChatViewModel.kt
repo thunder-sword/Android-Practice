@@ -4,59 +4,111 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.mypractice.utils.BaseViewModel
+import com.example.mypractice.utils.IUiIntent
+import com.example.mypractice.utils.IUiState
 import com.example.mypractice.utils.TCPConnectionIntent
 import com.example.mypractice.utils.TCPConnectionState
 import com.example.mypractice.utils.TCPConnectorViewModel
+import com.example.mypractice.utils.TCPListenerIntent
+import com.example.mypractice.utils.TCPListenerState
+import com.example.mypractice.utils.TCPListenerViewModel
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
-class MessageChatViewModel(val tcpConnectorViewModel: TCPConnectorViewModel): BaseViewModel<TCPConnectionState, TCPConnectionIntent>() {
+// 聊天界面的状态
+sealed class MessageChatState : IUiState {
+    data class Chatting(
+        val isServer: Boolean,
+        val message: String
+    ) : MessageChatState()
+    object Idle : MessageChatState()
+    data class Error(val message: String): MessageChatState()
+}
+
+// 聊天界面的意图
+sealed class MessageChatIntent : IUiIntent {
+    data class SendMessage(val message: String) : MessageChatIntent()
+}
+
+fun TCPConnectionState.toChatState(): MessageChatState {
+    return when (this) {
+        is TCPConnectionState.Connected -> MessageChatState.Chatting(
+            isServer = false,
+            message = if (message.startsWith("SendMessage: "))
+                message.removePrefix("SendMessage: ")
+            else ""
+        )
+        else -> MessageChatState.Idle
+    }
+}
+
+fun TCPListenerState.toChatState(): MessageChatState {
+    return when (this) {
+        is TCPListenerState.Connected -> MessageChatState.Chatting(
+            isServer = true,
+            message = if (receivedMessage.startsWith("SendMessage: "))
+                receivedMessage.removePrefix("SendMessage: ")
+            else ""
+        )
+        else -> MessageChatState.Idle
+    }
+}
+
+
+class MessageChatViewModel(
+    val tcpConnectorViewModel: TCPConnectorViewModel,
+    val tcpListenerViewModel: TCPListenerViewModel
+): BaseViewModel<MessageChatState, MessageChatIntent>() {
+
     init {
-        // 订阅 TCPConnectorViewModel 的状态更新
+        // 合并两个状态流
         viewModelScope.launch {
-            tcpConnectorViewModel.uiState.collect { state ->
-                // 这里可以选择直接更新自己的状态，或者做一些额外的处理
-                when(state){
-                    //忽略其他指令，接收到SendMessage指令时显示信息
-                    is TCPConnectionState.Connected -> {
-                        //此处状态中的message参数含义变为SendMessage指令的值
-                        if (state.message.startsWith("SendMessage: "))
-                            updateState { TCPConnectionState.Connected(
-                                ip = state.ip,
-                                port = state.port,
-                                message = state.message.removePrefix("SendMessage: "),
-                                info = state.info)
-                            }
-                        else
-                            updateState { TCPConnectionState.Connected(
-                                ip = state.ip,
-                                port = state.port,
-                                message = "",
-                                info = state.info)
-                            }
-                    }
-                    else -> updateState { state }
-                }
+            combine(
+                tcpConnectorViewModel.uiState,
+                tcpListenerViewModel.uiState
+            ) {
+              connectionState, listenerState ->
+                    //两个都连接则提示断开一个连接
+                    if(connectionState is TCPConnectionState.Connected && listenerState is TCPListenerState.Connected)
+                        MessageChatState.Error("Can't use two connections at the same time!")
+                    else if(connectionState is TCPConnectionState.Connected)
+                        connectionState.toChatState()
+                    else if(listenerState is TCPListenerState.Connected)
+                        listenerState.toChatState()
+                    else
+                        MessageChatState.Idle
+            }.collect{ chatState ->
+                updateState { chatState }
             }
         }
     }
 
-    override fun initUiState(): TCPConnectionState = TCPConnectionState.Idle
+    override fun initUiState(): MessageChatState = MessageChatState.Idle
 
-    override fun handleIntent(intent: TCPConnectionIntent) {
+    override fun handleIntent(state: MessageChatState, intent: MessageChatIntent) {
         when(intent){
-            is TCPConnectionIntent.SendMessage -> tcpConnectorViewModel.sendUiIntent(TCPConnectionIntent.SendMessage("SendMessage: ${intent.message}"))
-            else -> tcpConnectorViewModel.sendUiIntent(intent)
+            is MessageChatIntent.SendMessage -> {
+                //因为直接调用网络连接器的intent，所有没有对状态的判断，只能在这里判断
+                if(state is MessageChatState.Chatting) {
+                    val message = "SendMessage: ${intent.message}"
+                    if (state.isServer)
+                        tcpListenerViewModel.sendUiIntent(TCPListenerIntent.SendMessage(message))
+                    else
+                        tcpConnectorViewModel.sendUiIntent(TCPConnectionIntent.SendMessage(message))
+                }
+            }
         }
     }
 }
 
 class MessageChatViewModelFactory(
-    private val tcpConnectorViewModel: TCPConnectorViewModel
+    private val tcpConnectorViewModel: TCPConnectorViewModel,
+    private val tcpListenerViewModel: TCPListenerViewModel
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(MessageChatViewModel::class.java)) {
-            return MessageChatViewModel(tcpConnectorViewModel) as T
+            return MessageChatViewModel(tcpConnectorViewModel, tcpListenerViewModel) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

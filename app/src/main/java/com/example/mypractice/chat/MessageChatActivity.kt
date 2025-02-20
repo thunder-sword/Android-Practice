@@ -10,6 +10,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -43,10 +44,9 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModelProvider
 import com.example.mypractice.ui.theme.MyPracticeTheme
 import com.example.mypractice.utils.TCPClientLinkUI
-import com.example.mypractice.utils.TCPClientUI
-import com.example.mypractice.utils.TCPConnectionIntent
-import com.example.mypractice.utils.TCPConnectionState
 import com.example.mypractice.utils.TCPConnectorViewModel
+import com.example.mypractice.utils.TCPListenerViewModel
+import com.example.mypractice.utils.TCPServerLinkUI
 import kotlinx.coroutines.delay
 
 class MessageChatActivity : ComponentActivity() {
@@ -54,12 +54,16 @@ class MessageChatActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         // 使用 ViewModelProvider 获取实例
-        val tcpViewModel = ViewModelProvider(
+        val clientViewModel = ViewModelProvider(
             this
         )[TCPConnectorViewModel::class.java]
+        val serverViewModel = ViewModelProvider(
+            this
+        )[TCPListenerViewModel::class.java]
+
         val viewModel = ViewModelProvider(
             this,
-            MessageChatViewModelFactory(tcpViewModel)
+            MessageChatViewModelFactory(clientViewModel, serverViewModel)
         )[MessageChatViewModel::class.java]
 
         setContent {
@@ -124,8 +128,17 @@ fun MessageChatUI(viewModel: MessageChatViewModel){
     val state by viewModel.uiState.collectAsState()
 
     //连接成功后才显示对话界面
-    val connectedState = state as? TCPConnectionState.Connected ?: run {
-        TCPClientLinkUI(viewModel.tcpConnectorViewModel)
+    val connectedState = state as? MessageChatState.Chatting ?: run {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            TCPServerLinkUI(viewModel.tcpListenerViewModel)
+            TCPClientLinkUI(viewModel.tcpConnectorViewModel)
+        }
         return
     }
 
@@ -215,7 +228,7 @@ fun MessageChatUI(viewModel: MessageChatViewModel){
                 )
                 Button(onClick = {
                     if (messageToSend.isNotBlank()) {
-                        viewModel.sendUiIntent(TCPConnectionIntent.SendMessage(messageToSend))
+                        viewModel.sendUiIntent(MessageChatIntent.SendMessage(messageToSend))
                         myChatBubbleMessage = messageToSend
                         messageToSend = ""  // 发送后清空输入框
                     }

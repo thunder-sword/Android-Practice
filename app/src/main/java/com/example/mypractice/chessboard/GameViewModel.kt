@@ -87,7 +87,7 @@ class GameViewModel(context: Context): BaseViewModel<GameUiState, GameUiIntent>(
     }
 
     //重载处理意图事件函数
-    override fun handleIntent(intent: GameUiIntent) {
+    override fun handleIntent(state: GameUiState, intent: GameUiIntent) {
         val value = when (intent) {
             is GameUiIntent.StartGame -> startGame()
             is GameUiIntent.TapBoard -> handleTap(intent.offset)

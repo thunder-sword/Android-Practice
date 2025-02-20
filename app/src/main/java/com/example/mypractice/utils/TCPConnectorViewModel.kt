@@ -55,7 +55,7 @@ class TCPConnectorViewModel : BaseViewModel<TCPConnectionState, TCPConnectionInt
 
     override fun initUiState(): TCPConnectionState = TCPConnectionState.Idle
 
-    override fun handleIntent(intent: TCPConnectionIntent) {
+    override fun handleIntent(state: TCPConnectionState, intent: TCPConnectionIntent) {
         when (intent) {
             is TCPConnectionIntent.Connect -> connect(intent.ip, intent.port)
             TCPConnectionIntent.Disconnect -> disconnect()
@@ -188,6 +188,7 @@ class TCPConnectorViewModel : BaseViewModel<TCPConnectionState, TCPConnectionInt
 
     //释放资源
     override fun onCleared() {
+        println("connector onCleared called!")
         disconnect() // 复用现有的断开逻辑
         super.onCleared()
     }

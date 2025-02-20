@@ -56,7 +56,7 @@ class TCPListenerViewModel : BaseViewModel<TCPListenerState, TCPListenerIntent>(
 
     override fun initUiState(): TCPListenerState = TCPListenerState.Idle
 
-    override fun handleIntent(intent: TCPListenerIntent) {
+    override fun handleIntent(state: TCPListenerState, intent: TCPListenerIntent) {
         when (intent) {
             is TCPListenerIntent.StartListening -> startListening(intent.port)
             TCPListenerIntent.StopListening -> stopListening()
@@ -102,7 +102,7 @@ class TCPListenerViewModel : BaseViewModel<TCPListenerState, TCPListenerIntent>(
     }
 
     // 停止监听
-    private fun stopListening() {
+    public fun stopListening() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 reader?.close()
@@ -162,6 +162,7 @@ class TCPListenerViewModel : BaseViewModel<TCPListenerState, TCPListenerIntent>(
 
     //释放资源
     override fun onCleared() {
+        println("listener onCleared called!")
         stopListening()
         super.onCleared()
     }
