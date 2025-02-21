@@ -55,6 +55,11 @@ class TCPListenerActivity: ComponentActivity() {
             }
         }
     }
+
+    //Android12以上返回不会清理Activity，手动清理下
+    override fun onBackPressed() {
+        this.finish()
+    }
 }
 
 @Composable
@@ -102,7 +107,7 @@ fun TCPServerLinkUI(viewModel: TCPListenerViewModel) {
         SelectionContainer {
             Text(
                 text = when (state) {
-                    is TCPListenerState.Connected -> (state as TCPListenerState.Connected).info
+                    is TCPListenerState.Connected -> ""
                     is TCPListenerState.Error -> (state as TCPListenerState.Error).message
                     TCPListenerState.Idle -> "服务未启动"
                     is TCPListenerState.Listening -> (state as TCPListenerState.Listening).info

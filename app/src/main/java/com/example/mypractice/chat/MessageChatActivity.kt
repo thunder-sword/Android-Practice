@@ -77,6 +77,11 @@ class MessageChatActivity : ComponentActivity() {
             }
         }
     }
+
+    //Android12以上返回不会清理Activity，手动清理下
+    override fun onBackPressed() {
+        this.finish()
+    }
 }
 
 //画对话气泡

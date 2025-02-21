@@ -189,7 +189,9 @@ class TCPConnectorViewModel : BaseViewModel<TCPConnectionState, TCPConnectionInt
     //释放资源
     override fun onCleared() {
         println("connector onCleared called!")
-        disconnect() // 复用现有的断开逻辑
+        socket?.close()
+        writer?.close()
+        reader?.close()
         super.onCleared()
     }
 }

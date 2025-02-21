@@ -55,6 +55,11 @@ class TCPConnectorActivity: ComponentActivity() {
             }
         }
     }
+
+    //Android12以上返回不会清理Activity，手动清理下
+    override fun onBackPressed() {
+        this.finish()
+    }
 }
 
 @Composable

@@ -1,7 +1,6 @@
 package com.example.mypractice
 
 import android.content.Intent
-import android.content.res.Configuration
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -11,7 +10,6 @@ import androidx.compose.material.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.mypractice.chat.MessageChatActivity
 import com.example.mypractice.ui.theme.MyPracticeTheme
@@ -110,21 +108,6 @@ fun ChessGameMainScreen(startUp: (Int) -> Unit) {
             ) {
                 Text("MVI聊天室")
             }
-        }
-    }
-}
-
-@Suppress("UNUSED_EXPRESSION")
-@Preview(name = "lightScheme", uiMode = Configuration.UI_MODE_NIGHT_NO)
-@Preview(name = "darkScheme", uiMode = Configuration.UI_MODE_NIGHT_YES)
-@Composable
-fun TestMain(){
-    MyPracticeTheme {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colors.background
-        ) {
-            ChessGameMainScreen { _ -> 1 }
         }
     }
 }
