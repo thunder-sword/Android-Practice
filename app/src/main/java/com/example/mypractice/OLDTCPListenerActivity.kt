@@ -3,7 +3,6 @@ package com.example.mypractice
 import android.content.Context
 import android.os.Bundle
 import android.widget.Toast
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -22,11 +21,12 @@ import androidx.lifecycle.ViewModelProvider
 import com.example.mypractice.chessboard.GameViewModel
 import com.example.mypractice.chessboard.GameViewModelFactory
 import com.example.mypractice.ui.theme.MyPracticeTheme
+import com.example.mypractice.utils.BaseComponentActivity
 import kotlinx.coroutines.*
 import java.io.*
 import java.net.*
 
-class OLDTCPListenerActivity : ComponentActivity() {
+class OLDTCPListenerActivity : BaseComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 

@@ -6,7 +6,6 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import android.view.ViewTreeObserver
 import android.widget.Toast
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -55,10 +54,11 @@ import com.example.mypractice.chessboard.GameViewModel
 import com.example.mypractice.chessboard.GameViewModelFactory
 import com.example.mypractice.ui.theme.MyPracticeTheme
 import com.example.mypractice.ui.theme.chessBoardColor
+import com.example.mypractice.utils.BaseComponentActivity
 import kotlinx.coroutines.delay
 import androidx.compose.material.MaterialTheme as MaterialTheme1
 
-class ChessGameActivity : ComponentActivity() {
+class ChessGameActivity : BaseComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 

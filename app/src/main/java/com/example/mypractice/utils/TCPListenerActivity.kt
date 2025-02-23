@@ -2,7 +2,6 @@ package com.example.mypractice.utils
 
 import android.os.Bundle
 import android.widget.Toast
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -35,7 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
 import com.example.mypractice.ui.theme.MyPracticeTheme
 
-class TCPListenerActivity: ComponentActivity() {
+class TCPListenerActivity: BaseComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -54,11 +53,6 @@ class TCPListenerActivity: ComponentActivity() {
                 }
             }
         }
-    }
-
-    //Android12以上返回不会清理Activity，手动清理下
-    override fun onBackPressed() {
-        this.finish()
     }
 }
 

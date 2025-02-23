@@ -3,7 +3,6 @@ package com.example.mypractice.chat
 import android.os.Bundle
 import android.view.ViewTreeObserver
 import android.widget.Toast
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -43,13 +42,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModelProvider
 import com.example.mypractice.ui.theme.MyPracticeTheme
-import com.example.mypractice.utils.TCPClientLinkUI
-import com.example.mypractice.utils.TCPConnectorViewModel
-import com.example.mypractice.utils.TCPListenerViewModel
-import com.example.mypractice.utils.TCPServerLinkUI
+import com.example.mypractice.utils.*
 import kotlinx.coroutines.delay
 
-class MessageChatActivity : ComponentActivity() {
+class MessageChatActivity : BaseComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -76,11 +72,6 @@ class MessageChatActivity : ComponentActivity() {
                 }
             }
         }
-    }
-
-    //Android12以上返回不会清理Activity，手动清理下
-    override fun onBackPressed() {
-        this.finish()
     }
 }
 
