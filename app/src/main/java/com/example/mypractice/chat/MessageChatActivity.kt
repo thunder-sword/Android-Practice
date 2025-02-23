@@ -132,6 +132,10 @@ fun MessageChatUI(viewModel: MessageChatViewModel){
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            //如果有错误信息则显示错误信息
+            if(state is MessageChatState.Error){
+                Text((state as MessageChatState.Error).message)
+            }
             TCPServerLinkUI(viewModel.tcpListenerViewModel)
             TCPClientLinkUI(viewModel.tcpConnectorViewModel)
         }
