@@ -32,6 +32,7 @@ sealed class TCPListenerIntent : IUiIntent {
     data class StartListening(val port: Int) : TCPListenerIntent() // 启动监听
     object StopListening : TCPListenerIntent()                     // 停止监听
     data class SendMessage(val message: String) : TCPListenerIntent() // 发送消息
+    object Reconnect: TCPListenerIntent()
 }
 
 //获取本机全部ip，同时获取ipv4和ipv6（过滤了链路地址），ipv6用中括号[]包裹
@@ -61,6 +62,7 @@ class TCPListenerViewModel : BaseViewModel<TCPListenerState, TCPListenerIntent>(
             is TCPListenerIntent.StartListening -> startListening(intent.port)
             TCPListenerIntent.StopListening -> stopListening()
             is TCPListenerIntent.SendMessage -> sendMessage(intent.message)
+            TCPListenerIntent.Reconnect -> reconnect()
         }
     }
 
@@ -116,6 +118,11 @@ class TCPListenerViewModel : BaseViewModel<TCPListenerState, TCPListenerIntent>(
                 updateState { TCPListenerState.Stopped }
             }
         }
+    }
+
+    //重连逻辑
+    private fun reconnect(){
+        TODO()
     }
 
     // 发送消息

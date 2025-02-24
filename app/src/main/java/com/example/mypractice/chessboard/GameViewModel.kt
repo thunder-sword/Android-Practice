@@ -9,7 +9,12 @@ import com.example.mypractice.ChessBoard
 import com.example.mypractice.ChessPiece
 import com.example.mypractice.OnlineState
 import com.example.mypractice.PieceCamp
+import com.example.mypractice.TCPConnector
 import com.example.mypractice.utils.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 //联机状态枚举
 enum class OnlineState{
@@ -84,7 +89,15 @@ sealed class GameUiIntent: IUiIntent {
 }
 
 //游戏ViewModel
-class GameViewModel(context: Context): BaseViewModel<GameUiState, GameUiIntent>() {
+class GameViewModel(
+    private val context: Context,
+    private val onlineState: OnlineState = OnlineState.Local,        //联机状态
+    private val tcpConnector: TCPConnectorViewModel? = null,      //所用tcp连接器
+    private val tcpListener: TCPListenerViewModel? = null
+): BaseViewModel<GameUiState, GameUiIntent>() {
+    //网络连接器
+
+
     //初始化图片加载器
     val imageLoader = ImageLoader(context)
 
@@ -114,7 +127,7 @@ class GameViewModel(context: Context): BaseViewModel<GameUiState, GameUiIntent>(
     //重载处理意图事件函数
     override fun handleIntent(state: GameUiState, intent: GameUiIntent) {
         val value = when (intent) {
-            is GameUiIntent.StartGame -> startGame()
+            is GameUiIntent.StartGame -> startGame(state)
             is GameUiIntent.TapBoard -> handleTap(intent.offset)
             is GameUiIntent.TryRestartGame -> tryRestartGame()
             is GameUiIntent.TryBackStep -> tryBackStep()
@@ -122,8 +135,47 @@ class GameViewModel(context: Context): BaseViewModel<GameUiState, GameUiIntent>(
     }
 
     //开始游戏
-    private fun startGame(){
+    private fun startGame(state: GameUiState){
+        if(state is GameUiState.Running){
+            println("Game is already running.")
+        }
+        else{
+            //不是客户端则需要初始化棋盘
+            if (OnlineState.Client != onlineState){
+                //给当前布局和棋子数赋值
+                piecesLayout = defaultLayout["十字交叉型"]!!
+                piecesType = defaultType["等量经典棋数"]!!
+                //检查布局和棋子数是否适合
+                assert(checkMatch())
 
+                //如果合适则自动生成随机棋局
+                generateInitialBoard()
+
+                //随机选择先手玩家
+                currentPlayer = players.indices.random()
+            }
+
+            println("chessBoard: ${serializeChessBoard(currentBoard)}")
+            println("currentPlayer: $currentPlayer")
+
+            //如果是客户端
+            if (OnlineState.Client == onlineState){
+                //设置当前玩家为玩家2
+                localPlayer = 1
+                //等待服务器初始化房间
+                blockString = "等待服务器创建棋局..."
+                //启动一个协程不断发送请求
+                CoroutineScope(Dispatchers.IO).launch {
+                    while("等待服务器创建棋局..." == blockString){
+                        //请求棋局
+                        sendMessage("query: chessBoard")
+                        //请求当前玩家
+                        sendMessage("query: currentPlayer")
+                        delay(300)
+                    }
+                }
+            }
+        }
     }
 
     //点击棋盘
