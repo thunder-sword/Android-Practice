@@ -14,20 +14,21 @@ interface BaseCommand
 // 聊天界面的状态
 sealed class TCPCommandState : IUiState {
     object Idle : TCPCommandState()
+    object Connecting: TCPCommandState()
     data class Running(
-        val isServer: Boolean,
         val command: BaseCommand?,
         val value: String
     ) : TCPCommandState()
     data class Error(val message: String): TCPCommandState()
     data class Reconnecting(val attempt: Int, val status: String): TCPCommandState()
-    object Disconnected : TCPConnectionState() // 主动断开
+    object Disconnected: TCPCommandState() // 主动断开
 }
 
 // 聊天界面的意图
 sealed class TCPCommandIntent : IUiIntent {
     data class SendCommand(val command: BaseCommand, val value: String) : TCPCommandIntent()
     object Reconnect: TCPCommandIntent()
+    object Disconnect: TCPCommandIntent()
 }
 
 fun <T> TCPConnectionState.toCommandState(commandClass: KClass<T>): TCPCommandState where T : Enum<T>, T : BaseCommand{
@@ -44,12 +45,15 @@ fun <T> TCPConnectionState.toCommandState(commandClass: KClass<T>): TCPCommandSt
                 println("未识别的指令：$message")
             }
             TCPCommandState.Running(
-                isServer = false,
                 command = command,
                 value = value
             )
         }
-        else -> TCPCommandState.Idle
+        TCPConnectionState.Connecting -> TCPCommandState.Connecting
+        is TCPConnectionState.ConnectionFailed -> TCPCommandState.Error(error)
+        TCPConnectionState.Disconnected -> TCPCommandState.Disconnected
+        TCPConnectionState.Idle -> TCPCommandState.Idle
+        is TCPConnectionState.Reconnecting -> TCPCommandState.Reconnecting(attempt, status)
     }
 }
 
@@ -67,42 +71,48 @@ fun <T> TCPListenerState.toCommandState(commandClass: KClass<T>): TCPCommandStat
                 println("未识别的指令：$receivedMessage")
             }
             TCPCommandState.Running(
-                isServer = true,
                 command = command,
                 value = value
             )
         }
-        else -> TCPCommandState.Idle
+        is TCPListenerState.Error -> TCPCommandState.Error(message)
+        TCPListenerState.Idle -> TCPCommandState.Idle
+        is TCPListenerState.Listening -> TCPCommandState.Disconnected
+        TCPListenerState.Stopped -> TCPCommandState.Idle
     }
 }
 
 
 class TCPCommandViewModel<Command>(
-    val tcpConnectorViewModel: TCPConnectorViewModel?,
-    val tcpListenerViewModel: TCPListenerViewModel?,
+    private val tcpConnectorViewModel: TCPConnectorViewModel?,
+    private val tcpListenerViewModel: TCPListenerViewModel?,
     private val commandClass: KClass<Command>, // 命令枚举类型
 ): BaseViewModel<TCPCommandState, TCPCommandIntent>()
         where Command : BaseCommand, Command : Enum<Command>{
+
+    //当前ViewModel
+    private val isServer = (null == tcpConnectorViewModel)
+
     init {
+        //两个ViewModel不能同时提供
+        assert(null != tcpConnectorViewModel && null != tcpListenerViewModel)
+
         //合并两个状态流
         val connectorFlow = tcpConnectorViewModel?.uiState ?: flowOf(TCPConnectionState.Idle)
         val listenerFlow = tcpListenerViewModel?.uiState ?: flowOf(TCPListenerState.Idle)
 
         viewModelScope.launch {
             combine(connectorFlow, listenerFlow) { connectionState, listenerState ->
-                // 两个都连接则提示断开一个连接
                 when {
-                    connectionState is TCPConnectionState.Connected && listenerState is TCPListenerState.Connected ->
-                        TCPCommandState.Error("Can't use two connections at the same time!")
-                    connectionState is TCPConnectionState.Connected ->
+                    null == tcpListenerViewModel ->
                         connectionState.toCommandState(commandClass)
-                    listenerState is TCPListenerState.Connected ->
+                    null == tcpConnectorViewModel ->
                         listenerState.toCommandState(commandClass)
                     else ->
-                        TCPCommandState.Idle
+                        TCPCommandState.Error("Unknown situation!")
                 }
-            }.collect { chatState ->
-                updateState { chatState }
+            }.collect { commandState ->
+                updateState { commandState }
             }
         }
     }
@@ -115,21 +125,31 @@ class TCPCommandViewModel<Command>(
                 //因为直接调用网络连接器的intent，所有没有对状态的判断，只能在这里判断
                 if(state is TCPCommandState.Running) {
                     val message = "${intent.command}: ${intent.value}"
-                    if (state.isServer)
+                    if(isServer)
                         tcpListenerViewModel!!.sendUiIntent(TCPListenerIntent.SendMessage(message))
                     else
                         tcpConnectorViewModel!!.sendUiIntent(TCPConnectionIntent.SendMessage(message))
                 }
             }
-
-            TCPCommandIntent.Reconnect -> TODO()
+            TCPCommandIntent.Reconnect -> {
+                if(isServer)
+                    tcpListenerViewModel!!.sendUiIntent(TCPListenerIntent.Reconnect)
+                else
+                    tcpConnectorViewModel!!.sendUiIntent(TCPConnectionIntent.Reconnect)
+            }
+            TCPCommandIntent.Disconnect -> {
+                if(isServer)
+                    tcpListenerViewModel!!.sendUiIntent(TCPListenerIntent.StopListening)
+                else
+                    tcpConnectorViewModel!!.sendUiIntent(TCPConnectionIntent.Disconnect)
+            }
         }
     }
 }
 
 class TCPCommandViewModelFactory<Command>(
-    private val tcpConnectorViewModel: TCPConnectorViewModel,
-    private val tcpListenerViewModel: TCPListenerViewModel,
+    private val tcpConnectorViewModel: TCPConnectorViewModel?,
+    private val tcpListenerViewModel: TCPListenerViewModel?,
     private val commandClass: KClass<Command> // 命令枚举类型
 ) : ViewModelProvider.Factory where Command : BaseCommand, Command : Enum<Command> {
 

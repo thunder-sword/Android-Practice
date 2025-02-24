@@ -122,7 +122,32 @@ class TCPListenerViewModel : BaseViewModel<TCPListenerState, TCPListenerIntent>(
 
     //重连逻辑
     private fun reconnect(){
-        TODO()
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // 接受客户端连接（阻塞操作）
+                clientSocket = serverSocket?.accept()
+                clientSocket?.let { socket ->
+                    val clientAddress = socket.inetAddress.hostAddress ?: "unknown"
+                    val clientPort = socket.port
+
+                    writer = PrintWriter(socket.getOutputStream(), true)
+                    reader = BufferedReader(InputStreamReader(socket.inputStream))
+
+                    updateState {
+                        TCPListenerState.Connected(
+                            clientAddress,
+                            clientPort,
+                            info = "Client reconnected from $clientAddress:$clientPort"
+                        )
+                    }
+
+                    // 启动消息监听
+                    listenForMessages()
+                }
+            } catch (e: Exception) {
+                updateState { TCPListenerState.Error("Failed to reconnecting: ${e.message}") }
+            }
+        }
     }
 
     // 发送消息
