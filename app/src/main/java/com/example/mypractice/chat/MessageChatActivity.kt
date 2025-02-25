@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.ViewTreeObserver
 import android.widget.Toast
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -40,7 +41,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.ViewModelProvider
 import com.example.mypractice.ui.theme.MyPracticeTheme
 import com.example.mypractice.utils.*
 import kotlinx.coroutines.delay
@@ -50,17 +50,21 @@ class MessageChatActivity : BaseComponentActivity() {
         super.onCreate(savedInstanceState)
 
         // 使用 ViewModelProvider 获取实例
-        val clientViewModel = ViewModelProvider(
-            this
-        )[TCPConnectorViewModel::class.java]
-        val serverViewModel = ViewModelProvider(
-            this
-        )[TCPListenerViewModel::class.java]
+        val clientViewModel: TCPConnectorViewModel by viewModels()
+        val serverViewModel: TCPListenerViewModel by viewModels()
 
-        val viewModel = ViewModelProvider(
-            this,
-            MessageChatViewModelFactory(clientViewModel, serverViewModel)
-        )[MessageChatViewModel::class.java]
+        val combineViewModel: TCPCombineCommandViewModel<MessageCommand> by viewModels {
+            TCPCombineCommandViewModelFactory(
+                tcpConnectorViewModel = clientViewModel,
+                tcpListenerViewModel = serverViewModel,
+                commandClass = MessageCommand::class
+            )
+        }
+        val viewModel: MessageChatViewModel by viewModels {
+            MessageChatViewModelFactory(
+                combineViewModel
+            )
+        }
 
         setContent {
             MyPracticeTheme {
@@ -68,7 +72,7 @@ class MessageChatActivity : BaseComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colors.background
                 ) {
-                    MessageChatUI(viewModel)
+                    MessageChatUI(clientViewModel, serverViewModel, viewModel)
                 }
             }
         }
@@ -119,7 +123,7 @@ fun ChatBubble(
 }
 
 @Composable
-fun MessageChatUI(viewModel: MessageChatViewModel){
+fun MessageChatUI(clientViewModel: TCPConnectorViewModel, serverViewModel: TCPListenerViewModel, viewModel: MessageChatViewModel){
     val current = LocalContext.current
     val state by viewModel.uiState.collectAsState()
 
@@ -132,12 +136,17 @@ fun MessageChatUI(viewModel: MessageChatViewModel){
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            //如果有错误信息则显示错误信息
-            if(state is MessageChatState.Error){
-                Text((state as MessageChatState.Error).message)
+            //状态信息
+            when(val currentState = state){ // 捕获当前状态的快照
+                is MessageChatState.Error -> Text(currentState.message)
+                MessageChatState.Connecting -> Text("连接中...")
+                MessageChatState.Disconnected -> Text("已断开连接")
+                MessageChatState.Idle -> Text("未连接")
+                is MessageChatState.Reconnecting -> Text("重连${currentState.attempt}次")
+                else -> Text("未知状况")
             }
-            TCPServerLinkUI(viewModel.tcpListenerViewModel)
-            TCPClientLinkUI(viewModel.tcpConnectorViewModel)
+            TCPServerLinkUI(serverViewModel)
+            TCPClientLinkUI(clientViewModel)
         }
         return
     }

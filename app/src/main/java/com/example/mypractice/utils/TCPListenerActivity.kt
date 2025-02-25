@@ -100,11 +100,11 @@ fun TCPServerLinkUI(viewModel: TCPListenerViewModel) {
     ) {
         SelectionContainer {
             Text(
-                text = when (state) {
-                    is TCPListenerState.Connected -> ""
-                    is TCPListenerState.Error -> (state as TCPListenerState.Error).message
+                text = when (val currentState = state) {
+                    is TCPListenerState.Connected -> "连接自[${currentState.clientIp}]:${currentState.clientPort}"
+                    is TCPListenerState.Error -> currentState.message
                     TCPListenerState.Idle -> "服务未启动"
-                    is TCPListenerState.Listening -> (state as TCPListenerState.Listening).info
+                    is TCPListenerState.Listening -> currentState.info
                     TCPListenerState.Stopped -> "服务已停止"
                 },
                 modifier = Modifier.padding(8.dp)

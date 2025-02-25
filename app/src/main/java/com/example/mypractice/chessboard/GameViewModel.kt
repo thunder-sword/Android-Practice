@@ -136,46 +136,46 @@ class GameViewModel(
 
     //开始游戏
     private fun startGame(state: GameUiState){
-        if(state is GameUiState.Running){
-            println("Game is already running.")
-        }
-        else{
-            //不是客户端则需要初始化棋盘
-            if (OnlineState.Client != onlineState){
-                //给当前布局和棋子数赋值
-                piecesLayout = defaultLayout["十字交叉型"]!!
-                piecesType = defaultType["等量经典棋数"]!!
-                //检查布局和棋子数是否适合
-                assert(checkMatch())
-
-                //如果合适则自动生成随机棋局
-                generateInitialBoard()
-
-                //随机选择先手玩家
-                currentPlayer = players.indices.random()
-            }
-
-            println("chessBoard: ${serializeChessBoard(currentBoard)}")
-            println("currentPlayer: $currentPlayer")
-
-            //如果是客户端
-            if (OnlineState.Client == onlineState){
-                //设置当前玩家为玩家2
-                localPlayer = 1
-                //等待服务器初始化房间
-                blockString = "等待服务器创建棋局..."
-                //启动一个协程不断发送请求
-                CoroutineScope(Dispatchers.IO).launch {
-                    while("等待服务器创建棋局..." == blockString){
-                        //请求棋局
-                        sendMessage("query: chessBoard")
-                        //请求当前玩家
-                        sendMessage("query: currentPlayer")
-                        delay(300)
-                    }
-                }
-            }
-        }
+//        if(state is GameUiState.Running){
+//            println("Game is already running.")
+//        }
+//        else{
+//            //不是客户端则需要初始化棋盘
+//            if (OnlineState.Client != onlineState){
+//                //给当前布局和棋子数赋值
+//                piecesLayout = defaultLayout["十字交叉型"]!!
+//                piecesType = defaultType["等量经典棋数"]!!
+//                //检查布局和棋子数是否适合
+//                assert(checkMatch())
+//
+//                //如果合适则自动生成随机棋局
+//                generateInitialBoard()
+//
+//                //随机选择先手玩家
+//                currentPlayer = players.indices.random()
+//            }
+//
+//            println("chessBoard: ${serializeChessBoard(currentBoard)}")
+//            println("currentPlayer: $currentPlayer")
+//
+//            //如果是客户端
+//            if (OnlineState.Client == onlineState){
+//                //设置当前玩家为玩家2
+//                localPlayer = 1
+//                //等待服务器初始化房间
+//                blockString = "等待服务器创建棋局..."
+//                //启动一个协程不断发送请求
+//                CoroutineScope(Dispatchers.IO).launch {
+//                    while("等待服务器创建棋局..." == blockString){
+//                        //请求棋局
+//                        sendMessage("query: chessBoard")
+//                        //请求当前玩家
+//                        sendMessage("query: currentPlayer")
+//                        delay(300)
+//                    }
+//                }
+//            }
+//        }
     }
 
     //点击棋盘

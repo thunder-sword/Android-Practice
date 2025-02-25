@@ -110,13 +110,13 @@ fun TCPClientLinkUI(viewModel: TCPConnectorViewModel){
     ) {
         SelectionContainer {
             Text(
-                text = when (state) {
+                text = when (val currentState = state) {
                     is TCPConnectionState.Connected -> "网络连接成功"
                     TCPConnectionState.Connecting -> "正在尝试连接"
-                    is TCPConnectionState.ConnectionFailed -> "连接失败: ${(state as TCPConnectionState.ConnectionFailed).error}"
+                    is TCPConnectionState.ConnectionFailed -> "连接失败: ${currentState.error}"
                     TCPConnectionState.Disconnected -> "已断开连接"
                     TCPConnectionState.Idle -> "当前未连接"
-                    is TCPConnectionState.Reconnecting -> "连接断开，正在回连，尝试次数: ${(state as TCPConnectionState.Reconnecting).attempt}"
+                    is TCPConnectionState.Reconnecting -> "连接断开，正在回连，尝试次数: ${currentState.attempt}"
                 },
                 modifier = Modifier.padding(8.dp)
             )

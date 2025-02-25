@@ -3,8 +3,8 @@ package com.example.mypractice.utils
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlin.reflect.KClass
 
@@ -82,81 +82,74 @@ fun <T> TCPListenerState.toCommandState(commandClass: KClass<T>): TCPCommandStat
     }
 }
 
+// 新增统一网络接口
+interface TcpNetworkHandler {
+    val uiState: Flow<Any> // 原始状态流
+    fun sendMessage(message: String)
+    fun reconnect()
+    fun disconnect()
+}
 
+// 实现到具体 ViewModel
+class TCPConnectorHandler(private val vm: TCPConnectorViewModel) : TcpNetworkHandler {
+    override val uiState = vm.uiState
+    override fun sendMessage(message: String) = vm.sendUiIntent(TCPConnectionIntent.SendMessage(message))
+    override fun reconnect() = vm.sendUiIntent(TCPConnectionIntent.Reconnect)
+    override fun disconnect() = vm.sendUiIntent(TCPConnectionIntent.Disconnect)
+}
+
+class TCPListenerHandler(private val vm: TCPListenerViewModel) : TcpNetworkHandler {
+    override val uiState = vm.uiState
+    override fun sendMessage(message: String) = vm.sendUiIntent(TCPListenerIntent.SendMessage(message))
+    override fun reconnect() = vm.sendUiIntent(TCPListenerIntent.Reconnect)
+    override fun disconnect() = vm.sendUiIntent(TCPListenerIntent.StopListening)
+}
+
+//tcp命令类，支持client或server单个连接
 class TCPCommandViewModel<Command>(
-    private val tcpConnectorViewModel: TCPConnectorViewModel?,
-    private val tcpListenerViewModel: TCPListenerViewModel?,
+    private val handler: TcpNetworkHandler,
     private val commandClass: KClass<Command>, // 命令枚举类型
 ): BaseViewModel<TCPCommandState, TCPCommandIntent>()
         where Command : BaseCommand, Command : Enum<Command>{
 
-    //当前ViewModel
-    private val isServer = (null == tcpConnectorViewModel)
-
     init {
-        //两个ViewModel不能同时提供
-        assert(null != tcpConnectorViewModel && null != tcpListenerViewModel)
-
-        //合并两个状态流
-        val connectorFlow = tcpConnectorViewModel?.uiState ?: flowOf(TCPConnectionState.Idle)
-        val listenerFlow = tcpListenerViewModel?.uiState ?: flowOf(TCPListenerState.Idle)
-
         viewModelScope.launch {
-            combine(connectorFlow, listenerFlow) { connectionState, listenerState ->
-                when {
-                    null == tcpListenerViewModel ->
-                        connectionState.toCommandState(commandClass)
-                    null == tcpConnectorViewModel ->
-                        listenerState.toCommandState(commandClass)
-                    else ->
-                        TCPCommandState.Error("Unknown situation!")
+            handler.uiState
+                .map { state ->
+                    when (state) {
+                        is TCPConnectionState -> state.toCommandState(commandClass)
+                        is TCPListenerState -> state.toCommandState(commandClass)
+                        else -> TCPCommandState.Error("Unknown state type")
+                    }
                 }
-            }.collect { commandState ->
-                updateState { commandState }
-            }
+                .collect { updateState { it } }
         }
     }
 
     override fun initUiState(): TCPCommandState = TCPCommandState.Idle
 
     override fun handleIntent(state: TCPCommandState, intent: TCPCommandIntent) {
-        when(intent){
+        when (intent) {
             is TCPCommandIntent.SendCommand -> {
-                //因为直接调用网络连接器的intent，所有没有对状态的判断，只能在这里判断
-                if(state is TCPCommandState.Running) {
-                    val message = "${intent.command}: ${intent.value}"
-                    if(isServer)
-                        tcpListenerViewModel!!.sendUiIntent(TCPListenerIntent.SendMessage(message))
-                    else
-                        tcpConnectorViewModel!!.sendUiIntent(TCPConnectionIntent.SendMessage(message))
+                if (state is TCPCommandState.Running) {
+                    handler.sendMessage("${intent.command}: ${intent.value}")
                 }
             }
-            TCPCommandIntent.Reconnect -> {
-                if(isServer)
-                    tcpListenerViewModel!!.sendUiIntent(TCPListenerIntent.Reconnect)
-                else
-                    tcpConnectorViewModel!!.sendUiIntent(TCPConnectionIntent.Reconnect)
-            }
-            TCPCommandIntent.Disconnect -> {
-                if(isServer)
-                    tcpListenerViewModel!!.sendUiIntent(TCPListenerIntent.StopListening)
-                else
-                    tcpConnectorViewModel!!.sendUiIntent(TCPConnectionIntent.Disconnect)
-            }
+            TCPCommandIntent.Reconnect -> handler.reconnect()
+            TCPCommandIntent.Disconnect -> handler.disconnect()
         }
     }
 }
 
 class TCPCommandViewModelFactory<Command>(
-    private val tcpConnectorViewModel: TCPConnectorViewModel?,
-    private val tcpListenerViewModel: TCPListenerViewModel?,
+    private val handler: TcpNetworkHandler,
     private val commandClass: KClass<Command> // 命令枚举类型
 ) : ViewModelProvider.Factory where Command : BaseCommand, Command : Enum<Command> {
 
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(TCPCommandViewModel::class.java)) {
-            return TCPCommandViewModel(tcpConnectorViewModel, tcpListenerViewModel, commandClass) as T
+            return TCPCommandViewModel(handler, commandClass) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
