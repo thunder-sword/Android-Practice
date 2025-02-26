@@ -49,7 +49,7 @@ fun getLocalIPAddresses(): List<String> {
 }
 
 // TCPListener的ViewModel
-class TCPListenerViewModel : BaseViewModel<TCPListenerState, TCPListenerIntent>() {
+class TCPListenerViewModel : BaseViewModel<TCPListenerState, TCPListenerIntent, IUiEvent>() {
     private var serverSocket: ServerSocket? = null
     private var clientSocket: Socket? = null
     private var writer: PrintWriter? = null

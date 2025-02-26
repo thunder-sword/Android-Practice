@@ -13,7 +13,7 @@ class TCPCombineCommandViewModel<Command>(
     private val tcpConnectorViewModel: TCPConnectorViewModel?,
     private val tcpListenerViewModel: TCPListenerViewModel?,
     private val commandClass: KClass<Command>, // 命令枚举类型
-): BaseViewModel<TCPCommandState, TCPCommandIntent>()
+): BaseViewModel<TCPCommandState, TCPCommandIntent, IUiEvent>()
         where Command : BaseCommand, Command : Enum<Command>{
 
     private var isServer: Boolean? = null

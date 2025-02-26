@@ -35,7 +35,7 @@ sealed class TCPConnectionIntent : IUiIntent {
 }
 
 //tcp-viewModel
-class TCPConnectorViewModel : BaseViewModel<TCPConnectionState, TCPConnectionIntent>() {
+class TCPConnectorViewModel : BaseViewModel<TCPConnectionState, TCPConnectionIntent, IUiEvent>() {
     // 内部 TCP 连接相关变量
     private var socket: Socket? = null
     private var writer: PrintWriter? = null

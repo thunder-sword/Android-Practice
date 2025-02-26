@@ -109,7 +109,7 @@ class TCPListenerHandler(private val vm: TCPListenerViewModel) : TcpNetworkHandl
 class TCPCommandViewModel<Command>(
     private val handler: TcpNetworkHandler,
     private val commandClass: KClass<Command>, // 命令枚举类型
-): BaseViewModel<TCPCommandState, TCPCommandIntent>()
+): BaseViewModel<TCPCommandState, TCPCommandIntent, IUiEvent>()
         where Command : BaseCommand, Command : Enum<Command>{
 
     init {

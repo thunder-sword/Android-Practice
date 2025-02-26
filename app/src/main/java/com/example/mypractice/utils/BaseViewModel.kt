@@ -4,8 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -16,9 +19,12 @@ interface IUiState
 //标识用户意图（Intent）的接口
 interface IUiIntent
 
+//标识UI事件（Event）的接口
+interface IUiEvent
+
 //基础ViewModel
-abstract class BaseViewModel<UiState: IUiState, UiIntent: IUiIntent>: ViewModel(){
-    //用StateFlow构建UI State流
+abstract class BaseViewModel<UiState: IUiState, UiIntent: IUiIntent, UiEvent: IUiEvent>: ViewModel(){
+    //用StateFlow构建UI State流，状态（唯一数据源）
     private val _uiState = MutableStateFlow(this.initUiState())
     val uiState: StateFlow<UiState> = _uiState
     //用Channel来接收用户意图
@@ -26,6 +32,10 @@ abstract class BaseViewModel<UiState: IUiState, UiIntent: IUiIntent>: ViewModel(
     //后来采用Channel.BUFFERED，并结合 trySend 避免挂起
     private val _uiIntent = Channel<UiIntent>(Channel.BUFFERED)
     val uiIntent: Flow<UiIntent> = _uiIntent.receiveAsFlow()
+
+    // 一次性事件
+    private val _uiEvent = MutableSharedFlow<UiEvent>()
+    val uiEvent: SharedFlow<UiEvent> = _uiEvent.asSharedFlow()
 
     //初始化状态
     protected abstract fun initUiState(): UiState
@@ -42,11 +52,18 @@ abstract class BaseViewModel<UiState: IUiState, UiIntent: IUiIntent>: ViewModel(
         }
     }
 
+    //发送一次性事件
+    protected fun sendUiEvent(event: UiEvent) {
+        viewModelScope.launch {
+            _uiEvent.emit(event)
+        }
+    }
+
     init {
         //子线程自动处理意图
         viewModelScope.launch {
             uiIntent.collect{ intent ->
-                //这里是并行运行的，所以状态有可能不是最新状态，还没想到较好的解决方案
+                //需要全程不变的state请使用此参数，实时监听state请使用UiState.value
                 handleIntent(_uiState.value, intent)
             }
         }
