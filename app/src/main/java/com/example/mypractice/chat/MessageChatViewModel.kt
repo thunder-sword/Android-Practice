@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.mypractice.utils.BaseCommand
 import com.example.mypractice.utils.BaseViewModel
+import com.example.mypractice.utils.IUiEvent
 import com.example.mypractice.utils.IUiIntent
 import com.example.mypractice.utils.IUiState
 import com.example.mypractice.utils.TCPCombineCommandViewModel
@@ -37,7 +38,7 @@ sealed class MessageChatIntent : IUiIntent {
 
 class MessageChatViewModel(
     private val tcpCombineCommandViewModel: TCPCombineCommandViewModel<MessageCommand>
-): BaseViewModel<MessageChatState, MessageChatIntent>() {
+): BaseViewModel<MessageChatState, MessageChatIntent, IUiEvent>() {
 
     init {
         viewModelScope.launch {

@@ -49,12 +49,10 @@ import androidx.core.app.ActivityCompat
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.ViewModelProvider
-import com.example.mypractice.chessboard.GameViewModel
-import com.example.mypractice.chessboard.GameViewModelFactory
 import com.example.mypractice.ui.theme.MyPracticeTheme
 import com.example.mypractice.ui.theme.chessBoardColor
 import com.example.mypractice.utils.BaseComponentActivity
+import com.example.mypractice.utils.ImageLoader
 import kotlinx.coroutines.delay
 import androidx.compose.material.MaterialTheme as MaterialTheme1
 
@@ -62,11 +60,7 @@ class ChessGameActivity : BaseComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 使用 ViewModelProvider 获取实例
-        val viewModel = ViewModelProvider(
-            this,
-            GameViewModelFactory(applicationContext)
-        )[GameViewModel::class.java]
+        val imageLoader: ImageLoader = ImageLoader(this)
 
         setContent {
             MyPracticeTheme {
@@ -74,7 +68,7 @@ class ChessGameActivity : BaseComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme1.colors.background
                 ) {
-                    DrawMain(viewModel)
+                    DrawMain(imageLoader)
                 }
             }
         }
@@ -172,7 +166,7 @@ fun VoiceChatButton(
 //画棋盘
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.Local, tcpConnector: TCPConnector? = null) {
+fun ChessBoard(imageLoader: ImageLoader, onlineState: OnlineState = OnlineState.Local, tcpConnector: TCPConnector? = null) {
     val current = LocalContext.current
     //点击协程实例
     val scope = rememberCoroutineScope()
@@ -519,7 +513,7 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
                 ) {
                     //绘制棋盘
                     gameManager.chessBoard.initialize(size)
-                    gameManager.chessBoard.draw(this, imageLoader = viewModel.imageLoader)
+                    gameManager.chessBoard.draw(this, imageLoader = imageLoader)
 
                     // 绘制棋子图片
                     for (piece in gameManager.alivePieces) {
@@ -527,7 +521,7 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
                         val isRotate: Boolean = (piece.isFront && PieceCamp.Black == piece.camp)
                         piece.draw(
                             this,
-                            imageLoader = viewModel.imageLoader,
+                            imageLoader = imageLoader,
                             borderLeft = gameManager.chessBoard.borderLeft,
                             borderTop = gameManager.chessBoard.borderTop,
                             cellWidth = gameManager.chessBoard.cellWidth,
@@ -539,7 +533,7 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
                     // 绘制可到达位置提示格
                     gameManager.drawBox(
                         this,
-                        imageLoader = viewModel.imageLoader,
+                        imageLoader = imageLoader,
                         borderLeft = gameManager.chessBoard.borderLeft,
                         borderTop = gameManager.chessBoard.borderTop,
                         cellWidth = gameManager.chessBoard.cellWidth,
@@ -724,7 +718,7 @@ fun ChessBoard(viewModel: GameViewModel, onlineState: OnlineState = OnlineState.
 @Suppress("PreviewAnnotationInFunctionWithParameters")
 @Preview
 @Composable
-fun DrawMain(viewModel: GameViewModel) {
-    ChessBoard(viewModel)
+fun DrawMain(imageLoader: ImageLoader) {
+    ChessBoard(imageLoader)
 }
 

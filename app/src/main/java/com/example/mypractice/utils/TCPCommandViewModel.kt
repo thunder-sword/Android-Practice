@@ -17,7 +17,8 @@ sealed class TCPCommandState : IUiState {
     object Connecting: TCPCommandState()
     data class Running(
         val command: BaseCommand?,
-        val value: String
+        val value: String,
+        val info: String
     ) : TCPCommandState()
     data class Error(val message: String): TCPCommandState()
     data class Reconnecting(val attempt: Int, val status: String): TCPCommandState()
@@ -46,7 +47,8 @@ fun <T> TCPConnectionState.toCommandState(commandClass: KClass<T>): TCPCommandSt
             }
             TCPCommandState.Running(
                 command = command,
-                value = value
+                value = value,
+                info = info
             )
         }
         TCPConnectionState.Connecting -> TCPCommandState.Connecting
@@ -72,7 +74,8 @@ fun <T> TCPListenerState.toCommandState(commandClass: KClass<T>): TCPCommandStat
             }
             TCPCommandState.Running(
                 command = command,
-                value = value
+                value = value,
+                info = info
             )
         }
         is TCPListenerState.Error -> TCPCommandState.Error(message)

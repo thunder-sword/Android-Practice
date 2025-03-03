@@ -38,6 +38,7 @@ import com.example.mypractice.chessboard.GameViewModel
 import com.example.mypractice.chessboard.GameViewModelFactory
 import com.example.mypractice.ui.theme.MyPracticeTheme
 import com.example.mypractice.utils.BaseComponentActivity
+import com.example.mypractice.utils.ImageLoader
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -54,11 +55,7 @@ class OLDTCPConnectorActivity : BaseComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 使用 ViewModelProvider 获取实例
-        val viewModel = ViewModelProvider(
-            this,
-            GameViewModelFactory(applicationContext)
-        )[GameViewModel::class.java]
+        val imageLoader: ImageLoader = ImageLoader(this)
 
         setContent {
             MyPracticeTheme {
@@ -66,7 +63,7 @@ class OLDTCPConnectorActivity : BaseComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colors.background
                 ) {
-                    ConnectorMainScreen(viewModel)
+                    ConnectorMainScreen(imageLoader)
                 }
             }
         }
@@ -274,7 +271,7 @@ open class TCPConnector{
 }
 
 @Composable
-fun ConnectorMainScreen(viewModel: GameViewModel) {
+fun ConnectorMainScreen(imageLoader: ImageLoader) {
     val tcpConnector = remember {
         TCPConnector()
     }
@@ -305,7 +302,7 @@ fun ConnectorMainScreen(viewModel: GameViewModel) {
             )
         }
 
-        ChessBoard(viewModel, OnlineState.Client, tcpConnector)
+        ChessBoard(imageLoader, OnlineState.Client, tcpConnector)
     }
 }
 

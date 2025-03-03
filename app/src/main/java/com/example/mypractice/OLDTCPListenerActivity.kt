@@ -22,6 +22,7 @@ import com.example.mypractice.chessboard.GameViewModel
 import com.example.mypractice.chessboard.GameViewModelFactory
 import com.example.mypractice.ui.theme.MyPracticeTheme
 import com.example.mypractice.utils.BaseComponentActivity
+import com.example.mypractice.utils.ImageLoader
 import kotlinx.coroutines.*
 import java.io.*
 import java.net.*
@@ -30,11 +31,7 @@ class OLDTCPListenerActivity : BaseComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 使用 ViewModelProvider 获取实例
-        val viewModel = ViewModelProvider(
-            this,
-            GameViewModelFactory(applicationContext)
-        )[GameViewModel::class.java]
+        val imageLoader: ImageLoader = ImageLoader(this)
 
         setContent {
             MyPracticeTheme {
@@ -42,7 +39,7 @@ class OLDTCPListenerActivity : BaseComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colors.background
                 ) {
-                    ListenerMainScreen(viewModel)
+                    ListenerMainScreen(imageLoader)
                 }
             }
         }
@@ -188,7 +185,7 @@ fun getLocalIPAddresses(): List<String> {
 }
 
 @Composable
-fun ListenerMainScreen(viewModel: GameViewModel) {
+fun ListenerMainScreen(imageLoader: ImageLoader) {
     val tcpListener = remember {
         TCPListener()
     }
@@ -219,7 +216,7 @@ fun ListenerMainScreen(viewModel: GameViewModel) {
             )
         }
 
-        ChessBoard(viewModel, OnlineState.Server, tcpListener)
+        ChessBoard(imageLoader, OnlineState.Server, tcpListener)
     }
 }
 

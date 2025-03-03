@@ -2,6 +2,12 @@ package com.example.mypractice.chessboard
 
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -10,6 +16,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlin.math.sqrt
 
 //联机状态枚举
 enum class OnlineState{
@@ -42,7 +49,11 @@ data class DeadPiece(
 
 //等待状况枚举
 enum class WaitStatus(val info: String){
-    WaitChessSynchronization("等待服务器同步棋局...")
+    WaitChessBoard("等待服务器同步棋局..."),
+    WaitCurrentPlayer("等待服务器同步当前玩家..."),
+    WaitRestart("等待对方同意重新开始..."),
+    WaitBackStep("等待对方同意悔棋..."),
+    WaitReconnect("等待网络重连"),
 }
 
 //定义游戏事件
@@ -58,7 +69,8 @@ sealed class NetworkState{
     object Connecting: NetworkState()
     data class Running(
         val command: BaseCommand?,
-        val value: String
+        val value: String,
+        val info: String
     ): NetworkState()
     data class Waiting(val waitStatus: WaitStatus): NetworkState()
     data class Error(val message: String): NetworkState()
@@ -73,7 +85,7 @@ fun TCPCommandState.toNetworkState(): NetworkState{
         is TCPCommandState.Error -> NetworkState.Error(message)
         TCPCommandState.Idle -> NetworkState.Idle
         is TCPCommandState.Reconnecting -> NetworkState.Reconnecting(attempt)
-        is TCPCommandState.Running -> NetworkState.Running(command, value)
+        is TCPCommandState.Running -> NetworkState.Running(command, value, info)
     }
 }
 
@@ -119,6 +131,10 @@ sealed class GameUiIntent: IUiIntent {
 enum class ChessGameCommand: BaseCommand{
     QueryData,   //请求数据
     MoveChess,   //移动棋子
+    ChessBoard,  //设置客户端棋局
+    CurrentPlayer,  //设置客户端当前玩家
+    Restart,  //请求重新开始
+    BackStep,  //请求悔棋
 }
 
 //游戏ViewModel
@@ -126,8 +142,8 @@ class GameViewModel(
     private val onlineState: OnlineState = OnlineState.Local,        //联机状态
     private val tcpCommandViewModel: TCPCommandViewModel<ChessGameCommand>? = null,
 ): BaseViewModel<GameUiState, GameUiIntent, GameUiEvent>() {
-    //注册自动更新网络状态
     init{
+        //自动更新网络状态
         viewModelScope.launch {
             tcpCommandViewModel?.uiState?.collect{
                 updateState {
@@ -138,15 +154,26 @@ class GameViewModel(
                 }
             }
         }
+        //如果不是本地游戏，则自动处理接收来的指令
+        if(OnlineState.Local!=onlineState){
+            viewModelScope.launch {
+                tcpCommandViewModel!!.uiState.collect{ state ->
+                    when(state){
+                        is TCPCommandState.Running -> handleInst(state.command, state.value)
+                        else -> {}
+                    }
+                }
+            }
+        }
     }
 
     // 事件锁
     private val mutex = Mutex()
 
     //棋盘实例
-    private val chessBoard: ChessBoard = ChessBoard()
+    val chessBoard: ChessBoard = ChessBoard()
     // 玩家序列，直接用阵营表示
-    private val players: Array<PieceCamp> = PieceCamp.values()
+    val players: Array<PieceCamp> = PieceCamp.values()
     //当前棋局
     private var currentBoard: List<List<MutableList<ChessPiece>>> = List(chessBoard.cols){ List(chessBoard.rows){ mutableListOf() } }
 
@@ -160,7 +187,6 @@ class GameViewModel(
     private val canTapPieces: List<ChessPiece>
         get() = currentBoard.flatten()  //展平棋盘
             .mapNotNull { it.lastOrNull() }       //只取最后一个棋子
-
 
     //存储自游戏开始以来的所有操作步数，用于悔棋操作
     private var operations: MutableList<Operation> = mutableListOf()
@@ -525,7 +551,7 @@ class GameViewModel(
                 //本地玩家为玩家2
                 localPlayer = 1
                 //等待服务器初始化房间
-                waitStatus = WaitStatus.WaitChessSynchronization
+                waitStatus = WaitStatus.WaitChessBoard
             }
 
             //更新状态
@@ -539,7 +565,7 @@ class GameViewModel(
                         selectedPiece = null,
                         canToLocation = listOf()
                     ),
-                    if(waitStatus!=null) NetworkState.Waiting(waitStatus) else state.networkState
+                    if(waitStatus!=null) NetworkState.Waiting(waitStatus) else uiState.value.networkState
                 )
             }
 
@@ -547,19 +573,19 @@ class GameViewModel(
             if(OnlineState.Client == onlineState){
                 viewModelScope.launch {
                     val runningState = uiState.value.networkState as? NetworkState.Waiting ?: return@launch
-                    while (runningState.waitStatus == WaitStatus.WaitChessSynchronization) {
+                    while (runningState.waitStatus == WaitStatus.WaitChessBoard) {
                         //请求棋局
                         tcpCommandViewModel!!.sendUiIntent(
                             TCPCommandIntent.SendCommand(
                                 ChessGameCommand.QueryData,
-                                "chessBoard"
+                                ChessGameCommand.ChessBoard.name
                             )
                         )
                         //请求当前玩家
                         tcpCommandViewModel.sendUiIntent(
                             TCPCommandIntent.SendCommand(
                                 ChessGameCommand.QueryData,
-                                "currentPlayer"
+                                ChessGameCommand.CurrentPlayer.name
                             )
                         )
                         delay(300)
@@ -572,6 +598,119 @@ class GameViewModel(
     //获取可到达位置序列
     private fun getCanToLocation(selectedPiece: ChessPiece): List<Pair<Int, Int>>{
         return if (selectedPiece.isFront) { selectedPiece.canToLocation(currentBoard) ?: listOf() } else { listOf() }
+    }
+
+    //发送指令
+    private fun sendCommand(command: ChessGameCommand, value: String){
+        tcpCommandViewModel!!.sendUiIntent(TCPCommandIntent.SendCommand(command, value))
+    }
+
+    //处理接收到的指令
+    private fun handleInst(command: BaseCommand?, value: String){
+        if(null == command) return
+        val runningState = uiState.value.gamePlayUiState as GamePlayUiState.Running
+        val networkState = uiState.value.networkState
+
+        when(command){
+            ChessGameCommand.QueryData -> {
+                when(value){
+                    ChessGameCommand.ChessBoard.name -> {
+                        //发送棋局
+                        //sendMessage("chessBoard: ${serializeChessBoard(currentBoard)}")
+                        sendCommand(ChessGameCommand.ChessBoard, serializeChessBoard(currentBoard))
+                    }
+                    "currentPlayer" -> {
+                        //发送当前玩家
+                        //sendMessage("currentPlayer: $currentPlayer")
+                        sendCommand(ChessGameCommand.CurrentPlayer, runningState.currentPlayer.toString())
+                    }
+                }
+            }
+            ChessGameCommand.MoveChess -> {
+                val runningState = uiState.value.gamePlayUiState as GamePlayUiState.Running
+                if(runningState.currentPlayer != runningState.localPlayer){
+                    val (srcLocation, dstLocation) = deserializeMove(value)
+
+                    viewModelScope.launch {
+                        //加锁，使每次事件引起的状态变化顺序进行
+                        mutex.withLock {
+                            //只取每一叠象棋最上面那个棋子进行判断（这个不加锁就会导致点不到的棋子被点到）
+                            val selectedPiece = canTapPieces.find { it.isAlive && it.position == srcLocation }
+                            //发送过来的位置一定有棋子
+                            selectedPiece?.select()
+                            //记录当前移动操作
+                            operations.add(
+                                Operation(
+                                    players[runningState.currentPlayer],
+                                    selectedPiece!!,
+                                    selectedPiece!!.position,
+                                    dstLocation
+                                )
+                            )
+                            //如果起始位置和目标位置一样则翻面，不一样则移动
+                            if(srcLocation == dstLocation){
+                                selectedPiece?.toFront()
+                            }else {
+                                movePieceTo(selectedPiece, col = dstLocation.first, row = dstLocation.second)
+                            }
+                            selectedPiece?.deselect()
+                            //selectedPiece = null
+                            updateState {
+                                GameUiState(
+                                    GamePlayUiState.Running(
+                                        onlineState = onlineState,
+                                        currentPlayer = ( runningState.currentPlayer + 1) % players.size,
+                                        localPlayer = runningState.localPlayer,
+                                        currentBoard = currentBoard,
+                                        selectedPiece = null,
+                                        canToLocation = listOf()
+                                    ),
+                                    uiState.value.networkState
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            ChessGameCommand.ChessBoard -> {
+                if(OnlineState.Client == onlineState){
+                    currentBoard = deserializeChessBoard(value)
+                    updateState {
+                        GameUiState(
+                            GamePlayUiState.Running(
+                                onlineState = onlineState,
+                                currentPlayer = runningState.currentPlayer,
+                                localPlayer = runningState.localPlayer,
+                                currentBoard = currentBoard,
+                                selectedPiece = runningState.selectedPiece,
+                                canToLocation = runningState.canToLocation
+                            ),
+                            if(networkState is NetworkState.Waiting && networkState.waitStatus == WaitStatus.WaitChessBoard) NetworkState.Waiting(WaitStatus.WaitCurrentPlayer) else networkState
+                        )
+                    }
+                }
+            }
+            ChessGameCommand.CurrentPlayer -> {
+                if(OnlineState.Client == onlineState){
+                    val currentPlayer = value.toInt()
+                    updateState {
+                        GameUiState(
+                            GamePlayUiState.Running(
+                                onlineState = onlineState,
+                                currentPlayer = currentPlayer,
+                                localPlayer = runningState.localPlayer,
+                                currentBoard = currentBoard,
+                                selectedPiece = runningState.selectedPiece,
+                                canToLocation = runningState.canToLocation
+                            ),
+                            if(networkState is NetworkState.Waiting && networkState.waitStatus == WaitStatus.WaitCurrentPlayer) tcpCommandViewModel!!.uiState.value.toNetworkState() else networkState
+                        )
+                    }
+                }
+            }
+            ChessGameCommand.Restart -> TODO()
+            ChessGameCommand.BackStep -> TODO()
+        }
     }
 
     //点击棋盘
@@ -617,7 +756,7 @@ class GameViewModel(
                                     selectedPiece = clickedPiece,
                                     canToLocation = getCanToLocation(clickedPiece)
                                 ),
-                                state.networkState
+                                uiState.value.networkState
                             )
                         }
                     }
@@ -646,7 +785,7 @@ class GameViewModel(
                                     selectedPiece = null,
                                     canToLocation = listOf()
                                 ),
-                                state.networkState
+                                uiState.value.networkState
                             )
                         }
                     }
@@ -664,7 +803,7 @@ class GameViewModel(
                                     selectedPiece = null,
                                     canToLocation = listOf()
                                 ),
-                                state.networkState
+                                uiState.value.networkState
                             )
                         }
                     }
@@ -690,7 +829,7 @@ class GameViewModel(
                                     selectedPiece = null,
                                     canToLocation = listOf()
                                 ),
-                                state.networkState
+                                uiState.value.networkState
                             )
                         }
                     }
@@ -707,6 +846,53 @@ class GameViewModel(
     //尝试悔棋
     private fun tryBackStep(){
 
+    }
+
+    /**
+     * 绘制棋子可到达区域提示格
+     * @param drawScope 当前 Canvas 的绘制范围
+     * @param imageLoader 获取图片器
+     * @param borderLeft 棋盘的左侧空白部分长度
+     * @param borderTop 棋盘的顶部空白部分长度
+     * @param cellWidth 每个格子的宽度
+     * @param cellHeight 每个格子的高度
+     */
+    fun drawBox(drawScope: DrawScope, imageLoader: ImageLoader, borderLeft: Float, borderTop: Float, cellWidth: Float, cellHeight: Float) {
+        val bigImage: ImageBitmap = imageLoader.getImage("r_box")!!
+        val miniImage: ImageBitmap = imageLoader.getImage("r_minibox")!!
+
+        val runningState = uiState.value.gamePlayUiState as GamePlayUiState.Running
+        val canToLocation: List<Pair<Int, Int>> = if (true == runningState.selectedPiece?.isFront) { runningState.selectedPiece?.canToLocation(currentBoard) ?: listOf() } else { listOf() }
+
+        for((x, y) in canToLocation) {
+            //如果位置无棋子则画小格子，不为空则画大格子
+            val image = if(currentBoard[x][y].isEmpty()) miniImage else bigImage
+
+            val centerX = borderLeft + cellWidth * x
+            val centerY = borderTop + cellHeight * y
+            val size =
+                sqrt(cellWidth * cellWidth + cellHeight * cellHeight.toDouble()) * 0.68 //提示格的大小设定为0.70*格子的对角线长度
+
+            drawScope.drawIntoCanvas { canvas ->
+                val paint = Paint().apply {
+                    isAntiAlias = true
+                }
+
+                // 定义目标区域（图片最终绘制的位置和大小）
+                val dstOffset = IntOffset(
+                    (centerX - size / 2).toInt(),
+                    (centerY - size / 2).toInt()
+                )
+                val dstSize = IntSize(size.toInt(), size.toInt())
+                // 绘制图片
+                canvas.drawImageRect(
+                    image = image,
+                    dstOffset = dstOffset,
+                    dstSize = dstSize,
+                    paint = paint
+                )
+            }
+        }
     }
 }
 

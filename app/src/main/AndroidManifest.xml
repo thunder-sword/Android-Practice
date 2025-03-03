@@ -27,6 +27,9 @@
             android:name=".chat.MessageChatActivity"
             android:exported="false" />
         <activity
+            android:name=".chessboard.GameActivity"
+            android:exported="false" />
+        <activity
             android:name=".ChatActivity"
             android:exported="false" />
         <activity
